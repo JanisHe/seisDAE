@@ -11,7 +11,7 @@ import random
 from pycwt import pycwt
 import tensorflow as tf
 from tensorflow import keras
-from utils import readtxt
+from utils import load_obj
 
 
 def cwt_wrapper(x, dt=1.0, yshape=150, **kwargs):
@@ -39,28 +39,21 @@ def random_float(low, high):
 def predict(model_filename, config_filename, data_list, ckpt_model=False):
 
     # Read configs
-    config = readtxt(config_filename)
-
-    cwt = config['cwt']
+    config = load_obj(config_filename)
 
     # Read tensorflow model
     if ckpt_model is True:
         # Load weights from checkpoint
-        if cwt is True:
-            model = Model(ts_length=config['ts_length'], use_bias=config['use_bias'],
-                          activation=config['activation'], drop_rate=config['drop_rate'],
-                          channels=config['channels'], optimizer=config['optimizer'],
-                          loss=config['loss'], dt=config['dt'], decimation_factor=config['decimation_factor'],
-                          cwt=config['cwt'], yshape=config['yshape'])
-        else:
-            model = Model(ts_length=config['ts_length'], use_bias=config['use_bias'],
-                          activation=config['activation'], drop_rate=config['drop_rate'],
-                          channels=config['channels'], optimizer=config['optimizer'],
-                          loss=config['loss'], dt=config['dt'], decimation_factor=config['decimation_factor'],
-                          cwt=config['cwt'], yshape=config['yshape'])
-        model.build_model(depth=6)
+        model = Model(ts_length=config['ts_length'], use_bias=config['use_bias'],
+                      activation=config['activation'], drop_rate=config['drop_rate'],
+                      channels=config['channels'], optimizer=config['optimizer'],
+                      loss=config['loss'], dt=config['dt'], decimation_factor=config['decimation_factor'],
+                      cwt=config['cwt'], **config['kwargs'])
+        model.build_model(depth=config['depth'], filter_root=config['filter_root'], kernel_size=config['kernel_size'],
+                          strides=config['strides'], fully_connected=config['fully_connected'])
         model.model.load_weights(model_filename)
     else:
+        # Read fully trained model
         model = load_model(model_filename)
 
 
