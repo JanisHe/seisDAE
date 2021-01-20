@@ -9,7 +9,6 @@ from tensorflow.keras.layers import Input, Conv2D, BatchNormalization, ReLU, Dro
     MaxPooling2D, UpSampling2D, Dense, Softmax, Flatten, Reshape, PReLU
 from tensorflow.keras.utils import Sequence
 from tensorflow.keras.models import Model as tfmodel
-from tensorflow.keras.models import load_model
 import tensorflow as tf
 from scipy.signal import stft, istft
 import matplotlib.pyplot as plt
@@ -19,6 +18,7 @@ from pycwt import pycwt
 import copy
 from datetime import date
 from utils import save_obj
+import os
 
 
 def cwt_wrapper(x, dt=1.0, yshape=150, **kwargs):
@@ -37,7 +37,7 @@ def cwt_wrapper(x, dt=1.0, yshape=150, **kwargs):
     # Estimate dj as eq (9) & (10) in Torrence & Compo
     dj = 1 / yshape * np.log2(len(x) * dt / np.min(scales))
 
-    return coeffs, scales, dj
+    return coeffs, scales, dj, freqs
 
 
 def random_float(low, high):
@@ -106,7 +106,7 @@ class Model:
             _, _, dummystft = stft(dummy.data, fs=1 / self.dt, **kwargs)
             self.shape = dummystft.shape
         elif self.cwt is True:
-            dummy_coeff, _, _ = cwt_wrapper(x=dummy.data, dt=self.dt, **kwargs)
+            dummy_coeff, _, _, _ = cwt_wrapper(x=dummy.data, dt=self.dt, **kwargs)
             self.shape = (dummy_coeff.shape[0], dummy_coeff.shape[1])
 
     def build_model(self, filter_root=8, depth=4, kernel_size=(3, 3), fully_connected=False, strides=(2, 2),
@@ -225,30 +225,45 @@ class Model:
     def summarize(self):
         self.model.summary()
 
-    def save_model(self, pathname="./Models"):
-        """
-        Save model as .h5 file and write a .txt file with all important settings.
-        """
-        if self.cwt is False:
-            self.model.save("{}/{}_stft.h5".format(pathname, str(date.today())), overwrite=True)
-            settings_filename = "{}/{}_stft.config".format(pathname, str(date.today()))
-        elif self.cwt is True:
-            self.model.save("{}/{}_cwt.h5".format(pathname, str(date.today())), overwrite=True)
-            settings_filename = "{}/{}_cwt.config".format(pathname, str(date.today()))
+    def save_config(self, pathname="./config", filename=None):
+        if filename:
+            settings_filename = "{}/{}".format(pathname, filename)
+        else:
+            if self.cwt is False:
+                settings_filename = "{}/{}_stft.config".format(pathname, str(date.today()))
+            elif self.cwt is True:
+                settings_filename = "{}/{}_cwt.config".format(pathname, str(date.today()))
 
         # Write all important parameters to config file
         config_dict = dict(shape=self.shape, ts_length=self.ts_length, channels=self.channels,
                            depth=self.depth, filter_root=self.filter_root, kernel_size=self.kernel_size,
                            strides=self.strides, optimizer=str(optimizer), fully_connected=self.fully_connected,
                            use_bias=self.use_bias, loss=self.loss, activation=self.activation,
-                           drop_rate=self.drop_rate, decimation_factor=self.decimation_factor)
+                           drop_rate=self.drop_rate, decimation_factor=self.decimation_factor,
+                           max_pooling=self.max_pooling)
         save_obj(dictionary=config_dict, filename=settings_filename)
+
+    def save_model(self, pathname_model="./Models", pathname_config="./config"):
+        """
+        Save model as .h5 file and write a .txt file with all important settings.
+        """
+        # Save config file
+        self.save_config(pathname=pathname_config)
+        # Save fully trained model
+        if self.cwt is False:
+            self.model.save("{}/{}_stft.h5".format(pathname_model, str(date.today())), overwrite=True)
+        elif self.cwt is True:
+            self.model.save("{}/{}_cwt.h5".format(pathname_model, str(date.today())), overwrite=True)
 
 
     def train_model_generator(self, signal_file, noise_file,
                               epochs=50, batch_size=20, validation_split=0.15, verbose=1,
                               workers=8, use_multiprocessing=True):
 
+        # Save config file in config directory as tmp.config
+        self.save_config(pathname="./config", filename="tmp.config")
+
+        # Split value to split data into training and validation datasets
         split = int(len(signal_file) * (1 - validation_split))
 
         # Shuffle list randomly to get different data for validation
@@ -273,6 +288,9 @@ class Model:
                                       use_multiprocessing=use_multiprocessing,
                                       verbose=verbose, validation_data=generator_validate,
                                       callbacks=self.callbacks)
+
+        # Remove temporary config file
+        os.remove("./config/tmp.config")
 
     def plot_history(self, pathname="./figures", plot=True):
         """
@@ -402,9 +420,9 @@ class DataGenerator(Sequence):
                 _, _, cs = stft(signal, fs=1 / self.dt, **self.kwargs)
                 _, _, cn = stft(noise, fs=1 / self.dt, **self.kwargs)
             elif self.cwt is True:
-                cns, _, _ = cwt_wrapper(noisy_signal, dt=self.dt, **self.kwargs)
-                cs, _, _ = cwt_wrapper(signal, dt=self.dt, **self.kwargs)
-                cn, _, _ = cwt_wrapper(noise, dt=self.dt, **self.kwargs)
+                cns, _, _, _ = cwt_wrapper(noisy_signal, dt=self.dt, **self.kwargs)
+                cs, _, _, _ = cwt_wrapper(signal, dt=self.dt, **self.kwargs)
+                cn, _, _, _ = cwt_wrapper(noise, dt=self.dt, **self.kwargs)
 
             # Write data to empty np arrays
             # Zhu et al, 2018

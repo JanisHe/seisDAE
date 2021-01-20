@@ -1,42 +1,39 @@
-from model import cwt_wrapper
-from tensorflow.keras.models import load_model
-import numpy as np
-from pycwt import pycwt
-import matplotlib.pyplot as plt
-import copy
-from scipy.signal import stft, istft
-import glob
-import obspy
+"""
+Functions for prediction
+"""
+
 import random
+import obspy
+
+import numpy as np
+import matplotlib.pyplot as plt
+from tensorflow.keras.models import load_model
+from scipy.signal import stft, istft
+
 from pycwt import pycwt
-import tensorflow as tf
-from tensorflow import keras
+from model import cwt_wrapper
 from utils import load_obj
 
 
-def cwt_wrapper(x, dt=1.0, yshape=150, **kwargs):
+def predict(model_filename, config_filename, data_list, ckpt_model=True):
+    """
+    Function to predict data in data_list.
 
-    # Remove mean from x
-    x = x - np.mean(x)
+    Parameters:
+        model_filename: Full filename of model or checkpoints
+        config_filename: Full filename of config file
+        data_list: List that contains numpy arrays for denoising
+        ckpt_model; True if tensorflow checkpoints are used as model. Set False if a full trained model is used, but
+                    this is not necessary. Default is True
 
-    # Frequencies for CWT with numpy logspace
-    #freqs = np.logspace(start=np.log10(dt), stop=np.log10(1 / (2 * dt)), num=yshape)
-    freqs = np.linspace(dt, 1 / (2 * dt), yshape)
-
-    # Transforming x to TF-doamin
-    coeffs, scales, freqs_x, _, _, _ = pycwt.cwt(x, dt=dt, freqs=freqs, **kwargs)
-
-    # Estimate dj as eq (9) & (10) in Torrence & Compo
-    dj = 1 / yshape * np.log2(len(x) * dt / np.min(scales))
-
-    return coeffs, scales, dj, freqs_x
-
-
-def random_float(low, high):
-    return random.random()*(high-low) + low
-
-
-def predict(model_filename, config_filename, data_list, ckpt_model=False):
+    Returns:
+         recovered: Array that contains recoverd signal and noise. Has shape len(data_list)*ts_length*2, where
+                    recovered[i, :, 0] denotes the recovered signal and recovered[i, :, 1] the recovered noise.
+         transform_list: Array that contains all relevant transformations. Has shape
+                         len(data_list)*shape_of_transformation*config['channels'] + 1.
+                         First channel contains transformation of original signal, second channel contains
+                         transformation of recovered signal and third channel of recovered noise.
+    """
 
     # Read configs
     config = load_obj(config_filename)
@@ -52,250 +49,218 @@ def predict(model_filename, config_filename, data_list, ckpt_model=False):
         model.build_model(depth=config['depth'], filter_root=config['filter_root'], kernel_size=config['kernel_size'],
                           strides=config['strides'], fully_connected=config['fully_connected'])
         model.model.load_weights(model_filename)
+        input_shape = model.shape
     else:
         # Read fully trained model
         model = load_model(model_filename)
+        input_shape = (model.input_shape[1], model.input_shape[2])
 
+    # Allocate empty arrays for data
+    X = np.empty(shape=(len(data_list), *input_shape, config['channels']), dtype="float")
+    transform_list = np.empty(shape=(len(data_list), *input_shape, config['channels'] + 1), dtype="complex")
+    scales = []
+    dj = []
+    norm_factors = []
 
-def prediction(model_pathname, signal_list, noise_list, nfft=128, nperseg=128, noverlap=16, cwt=False):
-    model = load_model(model_pathname)
-    X = np.empty(shape=(len(signal_list), *(model.input_shape[1], model.input_shape[2]), model.input_shape[3]),
-                 dtype="float")
-    channels = model.input_shape[3]
-    x_noisy = []
-    stft_list = []
-    x_true = []
-
-    if channels == 1:
+    if config['channels'] == 1:
         phases = []
 
-    for i, signal in enumerate(signal_list):
-        signal = np.load(signal)
-        noise = np.load("{}".format(noise_list[random.randint(0, len(noise_list) - 1)]))
-        signal = signal.f.data[:6001]  #, 0]
-        noise = noise.f.data[:6001]  #, 0]
+    # Loop over each data array in data_list, transform data and write into new array which is used for prediction
+    for i, array in enumerate(data_list):
+        signal_tmp = array[:config['ts_length']]
 
         # Remove mean
-        noise = noise - np.mean(noise)
-        signal = signal - np.mean(signal)
+        signal_tmp = signal_tmp - np.mean(signal_tmp)
 
-        # Apply highpass filter
-        tr_n = obspy.Trace(data=noise, header=dict(delta=0.01))
-        tr_s = obspy.Trace(data=signal, header=dict(delta=0.01))
-        tr_n.filter("highpass", freq=0.5)
-        tr_s.filter("highpass", freq=0.5)
-
-        # Decimate by factor 2
-        #tr_n.decimate(factor=2)
-        #tr_s.decimate(factor=2)
-
-        # Normalize Noise and signal
-        noise = tr_n.data
-        signal = tr_s.data
-        noise = noise / np.max(np.abs(noise))
-        signal = signal / np.max(np.abs(signal))
-
-        # Adding signal and noise
-        rand_noise = random_float(0, 2)
-        rand_signal = random_float(0, 2)
-        noisy_signal = rand_signal * signal + rand_noise * noise
-
-        # Normalize Signal and Noise
-        norm = np.max(np.abs(noisy_signal))
-        noisy_signal = noisy_signal / norm
-        x_noisy.append(noisy_signal)
-        x_true.append(signal)
-
-        if cwt is False:
-            _, _, cns = stft(noisy_signal, fs=100, nfft=nfft, nperseg=nperseg, noverlap=noverlap)
-        elif cwt is True:
-            cns, scales, dj, freqs = cwt_wrapper(noisy_signal, dt=0.01, yshape=model.input_shape[1])
-        stft_list.append(cns)
-
-        # Write data to empty np arrays
-        # X[i, :, :, 0] = np.abs(cns)
-        X[i, :, :, 0] = cns.real
-
-        if channels == 1:
-            phases.append(np.arctan2(cns.imag, cns.real))
-        elif channels == 2:
-            # X[i, :, :, 1] = np.arctan2(cns.imag, cns.real)
-            X[i, :, :, 1] = cns.imag
-        else:
-            msg = "Channel number cannot exceed 2."
-            raise ValueError(msg)
-
-    pred = model.predict(X)
-
-    for i in range(pred.shape[0]):
-
-        if channels == 1:
-            x_pred = pred[i, :, :, 0] * np.exp(1j * phases[i])
-            # x_pred = np.abs(stft_list[i]) * pred[i, :, :, 0] * np.exp(1j * phases[i])
-        elif channels == 2:
-            # x_pred = pred[i, :, :, 0] * np.exp(1j * pred[i, :, :, 1])
-            x_pred = stft_list[i] * pred[i, :, :, 0]
-
-        plt.figure()
-        plt.subplot(221)
-        #plt.pcolormesh(np.abs(X[i, :, :, 0]))
-        plt.pcolormesh(np.abs(stft_list[i]))
-
-        plt.subplot(223)
-        plt.pcolormesh(np.abs(x_pred))
-
-        if cwt is False:
-            t, x_denoi = istft(x_pred, fs=100, nfft=nfft, nperseg=nperseg, noverlap=noverlap)
-        elif cwt is True:
-            x_denoi = pycwt.icwt(x_pred, dt=0.01, sj=scales, dj=dj)
-
-        plt.subplot(222)
-        plt.plot(x_noisy[i])
-
-        plt.subplot(224)
-        plt.plot(x_true[i], alpha=0.5, label="True Signal")
-        plt.plot(x_denoi / np.max(np.abs(x_denoi)), alpha=0.5, label="Denoised")
-        plt.legend()
-
-        plt.show()
-
-
-
-
-def predict_test_data(model, signal_list, nfft=128, nperseg=128, noverlap=16, cwt=False, decimation_factor=2):
-    X = np.empty(shape=(len(signal_list), *(model.input_shape[1], model.input_shape[2]), model.input_shape[3]),
-                 dtype="float")
-    channels = model.input_shape[3]
-    x_noisy = []
-    stft_list = []
-    names = []
-    p_picks = []
-    s_picks = []
-    norms = []
-
-    if channels == 1:
-        phases = []
-
-    for i, signal in enumerate(signal_list):
-        names.append(signal)
-        signal = np.load(signal)
-        p_picks.append(np.ceil(signal.f.itp))
-        s_picks.append(np.ceil(signal.f.its))
-        signal = signal.f.data[:6001]  # , 0]
-
-        # Remove mean
-        signal = signal - np.mean(signal)
-
-        # Apply highpass filter
-        tr_s = obspy.Trace(data=signal, header=dict(delta=0.01))
+        # Apply highpass filter and taper data
+        tr_s = obspy.Trace(data=signal_tmp, header=dict(delta=config['dt']))
         tr_s.filter("highpass", freq=0.5)
         tr_s.taper(0.02, type="cosine")
 
-        # Decimate by factor 2
-        tr_s.decimate(factor=decimation_factor)
+        # Decimate data
+        if config['decimation_factor'] is not None:
+            tr_s.decimate(factor=config['decimation_factor'])
+
+        # Allocate empty array for recovered signals
+        if i == 0:
+            recovered = np.empty(shape=(len(data_list), tr_s.stats.npts, 2), dtype="float")
 
         # Normalize Signal
         signal = tr_s.data
         norm = np.max(np.abs(signal))
         signal = signal / norm
+        norm_factors.append(norm)
 
-        x_noisy.append(signal)
-        norms.append(norm)
+        # Transform data either using STFT of CWT
+        if config['cwt'] is False:
+            _, _, cns = stft(signal, fs=1 / config['dt'], **config['kwargs'])
+        elif config['cwt'] is True:
+            cns, s, d_j, freqs = cwt_wrapper(signal, dt=config['dt'], **config['kwargs'])
+            scales.append(s)
+            dj.append(d_j)
 
-        if cwt is False:
-            _, _, cns = stft(signal, fs=100, nfft=nfft, nperseg=nperseg, noverlap=noverlap)
-        elif cwt is True:
-            cns, scales, dj, freqs = cwt_wrapper(signal, dt=tr_s.stats.delta, yshape=model.input_shape[1])
-        stft_list.append(cns)
+        # Add transform to transform_list
+        transform_list[i, :, :, 0] = cns
 
         # Write data to empty np arrays
         # X[i, :, :, 0] = np.abs(cns)
         X[i, :, :, 0] = cns.real
 
-        if channels == 1:
+        if config['channels'] == 1:
             phases.append(np.arctan2(cns.imag, cns.real))
-        elif channels == 2:
+        elif config['channels'] == 2:
             # X[i, :, :, 1] = np.arctan2(cns.imag, cns.real)
             X[i, :, :, 1] = cns.imag
         else:
             msg = "Channel number cannot exceed 2."
             raise ValueError(msg)
 
-    pred = model.predict(X)
+    # Denoise data by prediction with model
+    if ckpt_model is True:
+        X_pred = model.model.predict(X)
+    else:
+        X_pred = model.predict(X)
 
-    for i in range(pred.shape[0]):
+    # Loop over each element in predicted data and estimate denoised data
+    for i in range(X_pred.shape[0]):
+        if config['channels'] == 1:
+            x_pred = X_pred[i, :, :, 0] * np.exp(1j * phases[i])
+        elif config['channels'] == 2:
+            # x_pred = transform_list[i, :, :, 0] * np.exp(1j * X_pred[i, :, :, 1])
+            transform_list[i, :, :, 1] = transform_list[i, :, :, 0] * X_pred[i, :, :, 0]   # Recovered Signal
+            transform_list[i, :, :, 2] = transform_list[i, :, :, 0] * X_pred[i, :, :, 1]   # Recovered Noise
 
-        if channels == 1:
-            x_pred = pred[i, :, :, 0] * np.exp(1j * phases[i])
-            # x_pred = np.abs(stft_list[i]) * pred[i, :, :, 0] * np.exp(1j * phases[i])
-        elif channels == 2:
-            # x_pred = pred[i, :, :, 0] * np.exp(1j * pred[i, :, :, 1])
-            x_pred = stft_list[i] * pred[i, :, :, 0]
+        # Tranform modified transformation back into time-domain
+        if config['cwt'] is False:
+            t, rec_signal = istft(transform_list[i, :, :, 1], fs=1 / config['dt'], **config['kwargs'])
+            t, rec_noise = istft(transform_list[i, :, :, 2], fs=1 / config['dt'], **config['kwargs'])
+        elif config['cwt'] is True:
+            rec_signal = pycwt.icwt(transform_list[i, :, :, 1], dt=config['dt'], sj=scales[i], dj=dj[i])
+            rec_noise = pycwt.icwt(transform_list[i, :, :, 2], dt=config['dt'], sj=scales[i], dj=dj[i])
 
-        if decimation_factor == 1 or decimation_factor is None:
-            samples = np.arange(0, 6001)
-        elif decimation_factor == 2:
-            samples = np.arange(0, 3001)
-        elif decimation_factor == 4:
-            samples = np.arange(0, 1501)
+        # Multiply denoised trace by normalization factor to get true data without normalization
+        rec_signal = np.real(rec_signal * norm_factors[i])
+        rec_noise = np.real(rec_noise * norm_factors[i])
 
-        plt.figure()
-        plt.suptitle(names[i])
-        ax1 = plt.subplot(221)
-        #plt.pcolormesh(np.abs(X[i, :, :, 0]))
-        if cwt is True:
-            plt.pcolormesh(samples, freqs, np.abs(stft_list[i]))
-        plt.ylabel("Frequency (Hz)")
+        # Append denoised traces to list
+        recovered[i, :, 0] = rec_signal
+        recovered[i, :, 1] = rec_noise
 
-        plt.subplot(223, sharex=ax1, sharey=ax1)
-        if cwt is True:
-            plt.pcolormesh(samples, freqs, np.abs(x_pred))
-        plt.xlabel("Samples")
-        plt.ylabel("Frequency (Hz)")
+    return recovered, transform_list
 
-        if cwt is False:
-            t, x_denoi = istft(x_pred, fs=100, nfft=nfft, nperseg=nperseg, noverlap=noverlap)
-        elif cwt is True:
-            x_denoi = pycwt.icwt(x_pred, dt=tr_s.stats.delta, sj=scales, dj=dj)
 
-        ax2 = plt.subplot(222, sharex=ax1)
-        plt.plot(x_noisy[i] * norms[i], label="Original data", color="k")
-        plt.plot([p_picks[i]/ decimation_factor, p_picks[i]/decimation_factor], [-1, 1], color="r", label="P")
-        plt.plot([s_picks[i] / decimation_factor, s_picks[i] / decimation_factor], [-1, 1], color="b", label="S")
-        plt.ylabel("Normalized Amplitude")
-        plt.ylim([np.min(x_noisy[i] * norms[i]), np.max(x_noisy[i] * norms[i])])
+def predict_test_dataset(model_filename, config_filename, signal_list, noise_list, ckpt_model=True):
+    """
+    Function to test a trained model on a test dataset.
+    Plots all data and transformations.
+    Parameters:
+        model_filename: Full filename of model or checkpoints
+        config_filename: Full filename of config file
+        signal_list: List numpy array that contain Signals
+        noise_list: List of numpy array that contain noise. Noise is added to signal to get noisy signal.
+        ckpt_model; True if tensorflow checkpoints are used as model. Set False if a full trained model is used, but
+                    this is not necessary. Default is True
+
+    Returns:
+
+    """
+    # Allocate empty list
+    true_signal = []
+    true_noise = []
+    noisy_signal = []
+
+    # Read config file
+    config = load_obj(config_filename)
+
+    # Loop over each signal in signal_list and create noisy signal
+    for i, s in enumerate(signal_list):
+        # Read signal
+        signal = np.load(s)
+        signal = signal.f.data[:config['ts_length']]
+
+        # XXX Read P- and S-arrival if available
+
+        # Read noise data
+        noise = np.load("{}".format(noise_list[random.randint(0, len(noise_list) - 1)]))
+        noise = noise.f.data[:config['ts_length']]
+
+        # Add noise and signal
+        ns = signal + noise
+
+        # Add noisy_signal and true signal to list
+        true_signal.append(signal)
+        true_noise.append(noise)
+        noisy_signal.append(ns)
+
+    # Denoise noisy signals
+    recovered, transforms = predict(model_filename, config_filename, noisy_signal, ckpt_model)
+
+    # Plot denoised signal and transformation
+    for i in range(len(signal_list)):
+        # Decimate signals for correct comparison
+        if config['decimation_factor'] is not None:
+            tr_ns = obspy.Trace(data=noisy_signal[i], header=dict(delta=config['dt']))
+            tr_ns.decimate(factor=config['decimation_factor'])
+            noisy_signal[i] = tr_ns.data
+
+            tr_ts = obspy.Trace(data=true_signal[i], header=dict(delta=config['dt']))
+            tr_ts.decimate(factor=config['decimation_factor'])
+            true_signal[i] = tr_ts.data
+
+            tr_n = obspy.Trace(data=true_noise[i], header=dict(delta=config['dt']))
+            tr_n.decimate(factor=config['decimation_factor'])
+            true_noise[i] = tr_n.data
+
+            dt = tr_ts.stats.delta
+        else:
+            dt = config['dt']
+
+        # Define time axes
+        t_max = len(noisy_signal[i]) * dt
+        t_transform = np.linspace(0, t_max, num=transforms.shape[2])
+        t_waveform = np.arange(0, len(noisy_signal[i])) * dt
+
+        # Define frequency axis
+        freq_max = 1 / (2 * dt)
+        freqs = np.linspace(0, freq_max, num=transforms.shape[1])
+
+        fig = plt.figure()
+        ax1 = fig.add_subplot(321)
+        ax1.pcolormesh(t_transform, freqs, np.abs(transforms[i, :, :, 0]))
+
+        ax3 = fig.add_subplot(323, sharex=ax1, sharey=ax1)
+        ax3.pcolormesh(t_transform, freqs, np.abs(transforms[i, :, :, 1]))
+
+        ax5 = fig.add_subplot(325, sharex=ax1, sharey=ax1)
+        ax5.pcolormesh(t_transform, freqs, np.abs(transforms[i, :, :, 2]))
+
+        ax2 = fig.add_subplot(322, sharex=ax1)
+        ax2.plot(t_waveform, noisy_signal[i], color="k", alpha=0.5, label="Noisy Signal")
         plt.legend()
 
-        plt.subplot(224, sharex=ax1, sharey=ax2)
-        plt.plot(x_denoi * norms[i], alpha=1, color="k", label="Denoised")
-        plt.plot([p_picks[i] / decimation_factor, p_picks[i] / decimation_factor], [-1, 1], color="r", label="P")
-        plt.plot([s_picks[i] / decimation_factor, s_picks[i] / decimation_factor], [-1, 1], color="b", label="S")
-        plt.xlabel("Samples")
-        plt.ylabel("Normalized Amplitude")
+        ax4 = fig.add_subplot(324, sharex=ax1, sharey=ax2)
+        ax4.plot(t_waveform, true_signal[i], alpha=0.5, color="k", label="True Signal")
+        ax4.plot(t_waveform, recovered[i, :, 0], alpha=0.5, color="r", label="Denoised Signal")
+        plt.legend()
+
+        ax6 = fig.add_subplot(326, sharex=ax1, sharey=ax2)
+        ax6.plot(t_waveform, true_noise[i], alpha=0.5, color="k", label="True Noise")
+        ax6.plot(t_waveform, recovered[i, :, 1], alpha=0.5, color="r", label="Recovered Noise")
         plt.legend()
 
         plt.show()
+
 
 
 
 if __name__ == "__main__":
     import glob
     from model import Model
-    signal_list = glob.glob("/home/geophysik/dae_noise_data/signal/*")[:10]
-    noise_list = glob.glob("/home/geophysik/dae_noise_data/noise/*")[:10]
-    signal_test_list = glob.glob("/home/geophysik/cwt_denoiser_test_data/*")
+    signal_list = glob.glob("/rscratch/minos14/janis/dae_noise_data/signal/*")[:10]
+    noise_list = glob.glob("/rscratch/minos14/janis/dae_noise_data/noise/*/*")[:10]
+    signal_test_list = glob.glob("/rscratch/minos14/janis/cwt_denoiser_test_data/*")
 
-    # Load fully model
-    model = "/home/geophysik/Schreibtisch/cwt_denoiser/Models/2021-01-08_cwt.h5"
-    model = load_model(model)
+    model = "/rscratch/minos14/janis/cwt_denoiser/Models/2021-01-08_cwt.h5"  # checkpoints/latest_checkpoint.ckpt"
+    config = "/rscratch/minos14/janis/cwt_denoiser/config/config_test.config"
 
-    # # Load weights from checkpoint
-    # # Prediction: model.model.predict
-    # cpkt = "/home/geophysik/Schreibtisch/cwt_denoiser/checkpoints/latest_checkpoint.ckpt"
-    # model = Model(ts_length=6001, use_bias=False, activation=None, drop_rate=0.001, channels=2, optimizer="adam",
-    #               loss='mean_squared_error', dt=0.01, decimation_factor=2, cwt=True, yshape=80)
-    # model.build_model(depth=6)
-    # model.model.load_weights(cpkt)
-
-    #prediction(model, signal_list, noise_list, cwt=False, nfft=61, noverlap=16, nperseg=31)
-    predict_test_data(model, signal_test_list, cwt=True, decimation_factor=2)
+    predict_test_dataset(model, config, signal_list, noise_list, ckpt_model=True)
