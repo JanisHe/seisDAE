@@ -11,7 +11,7 @@ from tensorflow.keras.models import load_model
 from scipy.signal import stft, istft
 
 from pycwt import pycwt
-from model import cwt_wrapper
+from model import cwt_wrapper, Model
 from utils import load_obj
 
 
@@ -61,6 +61,7 @@ def predict(model_filename, config_filename, data_list, ckpt_model=True):
     scales = []
     dj = []
     norm_factors = []
+    dt = config['dt']
 
     if config['channels'] == 1:
         phases = []
@@ -80,10 +81,7 @@ def predict(model_filename, config_filename, data_list, ckpt_model=True):
         # Decimate data
         if config['decimation_factor'] is not None:
             tr_s.decimate(factor=config['decimation_factor'])
-
-        # Allocate empty array for recovered signals
-        if i == 0:
-            recovered = np.empty(shape=(len(data_list), tr_s.stats.npts, 2), dtype="float")
+            dt = tr_s.stats.delta
 
         # Normalize Signal
         signal = tr_s.data
@@ -93,11 +91,17 @@ def predict(model_filename, config_filename, data_list, ckpt_model=True):
 
         # Transform data either using STFT of CWT
         if config['cwt'] is False:
-            _, _, cns = stft(signal, fs=1 / config['dt'], **config['kwargs'])
+            freqs, _, cns = stft(signal, fs=1 / dt, **config['kwargs'])
         elif config['cwt'] is True:
-            cns, s, d_j, freqs = cwt_wrapper(signal, dt=config['dt'], **config['kwargs'])
+            cns, s, d_j, freqs = cwt_wrapper(signal, dt=dt, **config['kwargs'])
             scales.append(s)
             dj.append(d_j)
+
+        # Allocate empty array for recovered signals
+        if i == 0:
+            recovered = np.empty(shape=(len(data_list), tr_s.stats.npts, 2), dtype="float")
+            # dt = tr_s.stats.delta
+            # df = freqs[1] - freqs[0]
 
         # Add transform to transform_list
         transform_list[i, :, :, 0] = cns
@@ -132,11 +136,11 @@ def predict(model_filename, config_filename, data_list, ckpt_model=True):
 
         # Tranform modified transformation back into time-domain
         if config['cwt'] is False:
-            t, rec_signal = istft(transform_list[i, :, :, 1], fs=1 / config['dt'], **config['kwargs'])
-            t, rec_noise = istft(transform_list[i, :, :, 2], fs=1 / config['dt'], **config['kwargs'])
+            t, rec_signal = istft(transform_list[i, :, :, 1], fs=1 / dt, **config['kwargs'])
+            t, rec_noise = istft(transform_list[i, :, :, 2], fs=1 / dt, **config['kwargs'])
         elif config['cwt'] is True:
-            rec_signal = pycwt.icwt(transform_list[i, :, :, 1], dt=config['dt'], sj=scales[i], dj=dj[i])
-            rec_noise = pycwt.icwt(transform_list[i, :, :, 2], dt=config['dt'], sj=scales[i], dj=dj[i])
+            rec_signal = pycwt.icwt(transform_list[i, :, :, 1], dt=dt, sj=scales[i], dj=dj[i])
+            rec_noise = pycwt.icwt(transform_list[i, :, :, 2], dt=dt, sj=scales[i], dj=dj[i])
 
         # Multiply denoised trace by normalization factor to get true data without normalization
         rec_signal = np.real(rec_signal * norm_factors[i])
@@ -146,7 +150,7 @@ def predict(model_filename, config_filename, data_list, ckpt_model=True):
         recovered[i, :, 0] = rec_signal
         recovered[i, :, 1] = rec_noise
 
-    return recovered, transform_list
+    return recovered, transform_list, freqs
 
 
 def predict_test_dataset(model_filename, config_filename, signal_list, noise_list, ckpt_model=True):
@@ -193,7 +197,7 @@ def predict_test_dataset(model_filename, config_filename, signal_list, noise_lis
         noisy_signal.append(ns)
 
     # Denoise noisy signals
-    recovered, transforms = predict(model_filename, config_filename, noisy_signal, ckpt_model)
+    recovered, transforms, _ = predict(model_filename, config_filename, noisy_signal, ckpt_model)
 
     # Plot denoised signal and transformation
     for i in range(len(signal_list)):
@@ -260,7 +264,7 @@ if __name__ == "__main__":
     noise_list = glob.glob("/rscratch/minos14/janis/dae_noise_data/noise/*/*")[:10]
     signal_test_list = glob.glob("/rscratch/minos14/janis/cwt_denoiser_test_data/*")
 
-    model = "/rscratch/minos14/janis/cwt_denoiser/Models/2021-01-08_cwt.h5"  # checkpoints/latest_checkpoint.ckpt"
-    config = "/rscratch/minos14/janis/cwt_denoiser/config/config_test.config"
+    model = "/rscratch/minos14/janis/cwt_denoiser/Models/2021-01-22_stft.h5"  # checkpoints/latest_checkpoint.ckpt"
+    config = "/rscratch/minos14/janis/cwt_denoiser/config/2021-01-22_stft.config"
 
-    predict_test_dataset(model, config, signal_list, noise_list, ckpt_model=True)
+    predict_test_dataset(model, config, signal_list, noise_list, ckpt_model=False)

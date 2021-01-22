@@ -2,23 +2,25 @@
 Test for Denoising AuotEncoder. Input channels are absolute value and phase of STFT
 """
 
-import numpy as np
+import os
+import glob
+import copy
 import random
+
+import obspy
+import numpy as np
+import matplotlib.pyplot as plt
+
+from datetime import date
+from scipy.signal import stft, istft
 import tensorflow as tf
-from tensorflow.keras.layers import Input, Conv2D, BatchNormalization, ReLU, Dropout, Conv2DTranspose, Cropping2D, \
-    MaxPooling2D, UpSampling2D, Dense, Softmax, Flatten, Reshape, PReLU
 from tensorflow.keras.utils import Sequence
 from tensorflow.keras.models import Model as tfmodel
-import tensorflow as tf
-from scipy.signal import stft, istft
-import matplotlib.pyplot as plt
-import obspy
-import glob
+from tensorflow.keras.layers import Input, Conv2D, BatchNormalization, ReLU, Dropout, Conv2DTranspose, Cropping2D, \
+    MaxPooling2D, UpSampling2D, Dense, Softmax, Flatten, Reshape
+
 from pycwt import pycwt
-import copy
-from datetime import date
 from utils import save_obj
-import os
 
 
 def cwt_wrapper(x, dt=1.0, yshape=150, **kwargs):
@@ -73,6 +75,7 @@ class Model:
                  callbacks=None, **kwargs):
 
         self.dt = dt
+        self.dt_orig = dt
         self.ts_length = ts_length
         self.validation_split = validation_split
         self.optimizer = optimizer
@@ -105,6 +108,13 @@ class Model:
         if self.cwt is False:
             _, _, dummystft = stft(dummy.data, fs=1 / self.dt, **kwargs)
             self.shape = dummystft.shape
+            # Test whether stft is invertible and results in same length as input length
+            t, dummy_x = istft(Zxx=dummystft, fs=1 / self.dt, **kwargs)
+            if len(dummy_x) != len(dummy.data):
+                msg = "Keywordarguments of STFT and ISTFT do not fit. \nThus, length of inverse STFT is {} which is " \
+                      "not equal with length {} if input data.\nThis might lead to an error, when applying the " \
+                      "trained model.\nPlease change your keywordarguments.".format(len(dummy_x), len(dummy.data))
+                raise ValueError(msg)
         elif self.cwt is True:
             dummy_coeff, _, _, _ = cwt_wrapper(x=dummy.data, dt=self.dt, **kwargs)
             self.shape = (dummy_coeff.shape[0], dummy_coeff.shape[1])
@@ -235,12 +245,13 @@ class Model:
                 settings_filename = "{}/{}_cwt.config".format(pathname, str(date.today()))
 
         # Write all important parameters to config file
-        config_dict = dict(shape=self.shape, ts_length=self.ts_length, channels=self.channels,
+        config_dict = dict(shape=self.shape, ts_length=self.ts_length, dt=self.dt_orig, channels=self.channels,
                            depth=self.depth, filter_root=self.filter_root, kernel_size=self.kernel_size,
                            strides=self.strides, optimizer=str(optimizer), fully_connected=self.fully_connected,
                            use_bias=self.use_bias, loss=self.loss, activation=self.activation,
                            drop_rate=self.drop_rate, decimation_factor=self.decimation_factor,
-                           max_pooling=self.max_pooling)
+                           max_pooling=self.max_pooling, cwt=self.cwt, kwargs=self.kwargs,
+                           data_augmentation=self.data_augmentation)
         save_obj(dictionary=config_dict, filename=settings_filename)
 
     def save_model(self, pathname_model="./Models", pathname_config="./config"):
@@ -346,6 +357,10 @@ class DataGenerator(Sequence):
         self.ts_length = ts_length
         self.data_augmentation = data_augmentation
         self.kwargs = kwargs
+
+        if len(noise_list) == 0:
+            msg = "Could not load noise files from {}".format(noise_list)
+            raise ValueError(msg)
 
     def __len__(self):
         return int(np.floor(len(self.signal_list) / self.batch_size))
@@ -458,8 +473,8 @@ if __name__ == "__main__":
 
     #"/home/geophysik/Schreibtisch/denoiser_data/"
 
-    signal_files = glob.glob("/home/geophysik/dae_noise_data/signal/*")[:60000]
-    noise_files = "/home/geophysik/dae_noise_data/noise/*/*/*"
+    signal_files = glob.glob("/rscratch/minos14/janis/dae_noise_data/signal/*")[:60000]
+    noise_files = "/rscratch/minos14/janis/dae_noise_data/noise/*/*"
 
     callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=10, verbose=1),
                  tf.keras.callbacks.ModelCheckpoint(filepath="./checkpoints/latest_checkpoint.ckpt",
@@ -472,7 +487,7 @@ if __name__ == "__main__":
 
     m = Model(ts_length=6001, use_bias=False, activation=None, drop_rate=0.001, channels=2, optimizer=optimizer,
               loss='mean_squared_error', callbacks=callbacks,
-              dt=0.01, decimation_factor=2, cwt=True, yshape=50)  # nfft=61, noverlap=16, nperseg=31)
+              dt=0.01, decimation_factor=2, cwt=True, yshape=50)
     m.build_model(filter_root=8, depth=6, fully_connected=False, max_pooling=False)
     m.summarize()
     m.train_model_generator(signal_file=signal_files, noise_file=noise_files, batch_size=40, epochs=350)
