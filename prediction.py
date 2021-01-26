@@ -15,7 +15,7 @@ from model import cwt_wrapper, Model
 from utils import load_obj
 
 
-def predict(model_filename, config_filename, data_list, ckpt_model=True):
+def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_model=True,):
     """
     Function to predict data in data_list.
 
@@ -23,6 +23,7 @@ def predict(model_filename, config_filename, data_list, ckpt_model=True):
         model_filename: Full filename of model or checkpoints
         config_filename: Full filename of config file
         data_list: List that contains numpy arrays for denoising
+        optimizer: tensorflow optimizer for Model. Necessary if ckpt_model is True, default is adam.
         ckpt_model; True if tensorflow checkpoints are used as model. Set False if a full trained model is used, but
                     this is not necessary. Default is True
 
@@ -43,7 +44,7 @@ def predict(model_filename, config_filename, data_list, ckpt_model=True):
         # Load weights from checkpoint
         model = Model(ts_length=config['ts_length'], use_bias=config['use_bias'],
                       activation=config['activation'], drop_rate=config['drop_rate'],
-                      channels=config['channels'], optimizer=config['optimizer'],
+                      channels=config['channels'], optimizer=optimizer,
                       loss=config['loss'], dt=config['dt'], decimation_factor=config['decimation_factor'],
                       cwt=config['cwt'], **config['kwargs'])
         model.build_model(depth=config['depth'], filter_root=config['filter_root'], kernel_size=config['kernel_size'],
@@ -153,7 +154,7 @@ def predict(model_filename, config_filename, data_list, ckpt_model=True):
     return recovered, transform_list, freqs
 
 
-def predict_test_dataset(model_filename, config_filename, signal_list, noise_list, ckpt_model=True):
+def predict_test_dataset(model_filename, config_filename, signal_list, noise_list, optimizer="adam", ckpt_model=True):
     """
     Function to test a trained model on a test dataset.
     Plots all data and transformations.
@@ -162,6 +163,7 @@ def predict_test_dataset(model_filename, config_filename, signal_list, noise_lis
         config_filename: Full filename of config file
         signal_list: List numpy array that contain Signals
         noise_list: List of numpy array that contain noise. Noise is added to signal to get noisy signal.
+        optimizer: tensorflow optimizer for Model. Necessary if ckpt_model is True, default is adam.
         ckpt_model; True if tensorflow checkpoints are used as model. Set False if a full trained model is used, but
                     this is not necessary. Default is True
 
@@ -197,7 +199,7 @@ def predict_test_dataset(model_filename, config_filename, signal_list, noise_lis
         noisy_signal.append(ns)
 
     # Denoise noisy signals
-    recovered, transforms, _ = predict(model_filename, config_filename, noisy_signal, ckpt_model)
+    recovered, transforms, _ = predict(model_filename, config_filename, noisy_signal, optimizer, ckpt_model)
 
     # Plot denoised signal and transformation
     for i in range(len(signal_list)):

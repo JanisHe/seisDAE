@@ -227,7 +227,7 @@ class Model:
                    use_bias=self.use_bias)(h)
         h = Softmax()(h)
 
-        # Compile Model
+        # Build model and compile Model
         self.model = tfmodel(input_layer, h)
         self.model.compile(optimizer=self.optimizer, loss=self.loss, metrics=['accuracy'])
 
@@ -245,9 +245,14 @@ class Model:
                 settings_filename = "{}/{}_cwt.config".format(pathname, str(date.today()))
 
         # Write all important parameters to config file
+        if isinstance(self.optimizer, str) is True:
+            optimizer_name = self.optimizer
+        else:
+            optimizer_name = self.optimizer._name
+            
         config_dict = dict(shape=self.shape, ts_length=self.ts_length, dt=self.dt_orig, channels=self.channels,
                            depth=self.depth, filter_root=self.filter_root, kernel_size=self.kernel_size,
-                           strides=self.strides, optimizer=str(optimizer), fully_connected=self.fully_connected,
+                           strides=self.strides, optimizer=optimizer_name, fully_connected=self.fully_connected,
                            use_bias=self.use_bias, loss=self.loss, activation=self.activation,
                            drop_rate=self.drop_rate, decimation_factor=self.decimation_factor,
                            max_pooling=self.max_pooling, cwt=self.cwt, kwargs=self.kwargs,
@@ -473,7 +478,7 @@ if __name__ == "__main__":
 
     #"/home/geophysik/Schreibtisch/denoiser_data/"
 
-    signal_files = glob.glob("/rscratch/minos14/janis/dae_noise_data/signal/*")[:60000]
+    signal_files = glob.glob("/rscratch/minos14/janis/dae_noise_data/signal/*")[:600]
     noise_files = "/rscratch/minos14/janis/dae_noise_data/noise/*/*"
 
     callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=10, verbose=1),
