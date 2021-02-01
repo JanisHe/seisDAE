@@ -1,5 +1,5 @@
 """
-Test for Denoising AuotEncoder. Input channels are absolute value and phase of STFT
+Denoising AutoEncoder
 """
 
 import os
@@ -40,10 +40,6 @@ def cwt_wrapper(x, dt=1.0, yshape=150, **kwargs):
     dj = 1 / yshape * np.log2(len(x) * dt / np.min(scales))
 
     return coeffs, scales, dj, freqs
-
-
-def random_float(low, high):
-    return random.random()*(high-low) + low
 
 
 def cropping_layer(needed_shape, is_shape):
@@ -288,13 +284,13 @@ class Model:
 
         # Generate data for each batch
         generator_train = DataGenerator(signal_list=signal_file[:split], noise_list=noise_file,
-                                        batch_size=batch_size,
+                                        batch_size=batch_size, channels=self.channels,
                                         shape=self.shape, data_augmentation=self.data_augmentation,
                                         cwt=self.cwt, dt=self.dt, ts_length=self.ts_length,
                                         decimation_factor=self.decimation_factor,
                                         **self.kwargs)
         generator_validate = DataGenerator(signal_list=signal_file[split:], noise_list=noise_file,
-                                           batch_size=batch_size,
+                                           batch_size=batch_size, channels=self.channels,
                                            shape=self.shape, data_augmentation=self.data_augmentation,
                                            cwt=self.cwt, dt=self.dt, ts_length=self.ts_length,
                                            decimation_factor=self.decimation_factor,
@@ -386,8 +382,10 @@ class DataGenerator(Sequence):
             noise = np.load(noise_filename)
 
             # Read signal and noise from npz files
-            signal = signal.f.data[:self.ts_length]
-            noise = noise.f.data[:self.ts_length]
+            p_samp = signal["itp"]   # Sample of P-arrival
+            s_samp = signal["its"]   # Sample of S-arrival
+            signal = signal["data"]
+            noise = noise["data"][:self.ts_length]
 
             # XXX Leads to Runtime Warnings (Division by zero) in estimation of mapping functions
             # XXX RuntimeWarning: divide by zero encountered in true_divide
@@ -395,38 +393,48 @@ class DataGenerator(Sequence):
             # Move signal randomly, hence P-arrival varies its place
             # Add randomly zeros at beginning
             if self.data_augmentation is True:
-                add_zeros = np.random.uniform(low=-1, high=1,
-                                              size=(random.randint(0, int(self.ts_length / 2)), )) * 1e-15
-                signal = np.concatenate((add_zeros, signal))
-                # Cut signal to length of ts_length
+                # epsilon = 0  # Avoiding zeros in added arrays
+                # shift1 = np.random.uniform(low=-1, high=1, size=int(self.ts_length - s_samp)) * epsilon
+                shift1 = np.zeros(shape=int(self.ts_length - s_samp))
+                signal = np.concatenate((shift1, signal))
+                # Cut signal to length of ts_length and arrival of P-phase is included
+                p_samp += len(shift1)
+                s_samp += len(shift1)
+                start = random.randint(0, p_samp)
+                signal = signal[start:start + self.ts_length]
+            else:
                 signal = signal[:self.ts_length]
 
             # Remove mean
             noise = noise - np.mean(noise)
             signal = signal - np.mean(signal)
 
-            # Apply highpass filter
+            # Apply highpass filter and taper
             tr_n = obspy.Trace(data=noise, header=dict(delta=self.dt))
             tr_s = obspy.Trace(data=signal, header=dict(delta=self.dt))
             tr_n.filter("highpass", freq=0.5)
             tr_s.filter("highpass", freq=0.5)
+            tr_s.taper(max_percentage=0.02, type="cosine")
+            tr_n.taper(max_percentage=0.02, type="cosine")
 
             # Decimate by factor decimation_factor
             if self.decimation_factor:
                 tr_n.decimate(factor=self.decimation_factor)
                 tr_s.decimate(factor=self.decimation_factor)
 
-            # XXX Test some different normalizing
-            # Normalize Noise and signal
+            # Normalize Noise and signal by each max. absolute value
+            # Since noise and signal do not have same amplitude range, each trace is normalized by itself
             noise = tr_n.data
             signal = tr_s.data
             noise = noise / np.max(np.abs(noise))
             signal = signal / np.max(np.abs(signal))
 
             # Adding signal and noise
-            rand_noise = random_float(0, 2)
-            rand_signal = random_float(0, 2)
-            noisy_signal = rand_signal * signal + rand_noise * noise
+            rand_noise = np.random.uniform(0, 2)
+            rand_signal = np.random.uniform(0, 2)
+            signal *= rand_signal
+            noise *= rand_noise
+            noisy_signal = signal + noise
 
             # Normalize Signal and Noise
             norm = np.max(np.abs(noisy_signal))
@@ -444,17 +452,21 @@ class DataGenerator(Sequence):
                 cs, _, _, _ = cwt_wrapper(signal, dt=self.dt, **self.kwargs)
                 cn, _, _, _ = cwt_wrapper(noise, dt=self.dt, **self.kwargs)
 
+            np.seterr(divide='ignore', invalid='ignore')  # Ignoring Runtime Warnings for division by zero
             # Write data to empty np arrays
             # Zhu et al, 2018
             X[i, :, :, 0] = cns.real
             Y[i, :, :, 0] = 1 / (1 + np.abs(cn) / np.abs(cs))
 
-            # X[i, :, :, 0] = np.abs(cns)
-            # Y[i, :, :, 0] = np.abs(cs)
+            # X[i, :, :, 0] = np.abs(cns) / (np.max(np.abs(cn)) + np.max(np.abs(cns)))
+            #Y[i, :, :, 0] = np.abs(cs) / (np.max(np.abs(cn)) + np.max(np.abs(cns)))
 
             # X[i, :, :, 0] = np.abs(cns)
             # Y[i, :, :, 0] = np.abs(cs) / np.abs(cns)
+            #Y[i, :, :, 0] = np.abs(cs) / (np.abs(cs) + np.abs(cn))
+            #Y[i, :, :, 0] = (Y[i, :, :, 0] - np.mean(Y[i, :, :, 0])) / np.std(Y[i, :, :, 0])
 
+            # Replace nan and inf values
             Y[i, :, :, 0] = np.nan_to_num(Y[i, :, :, 0])
 
             if self.channels == 2:
@@ -462,12 +474,16 @@ class DataGenerator(Sequence):
                 X[i, :, :, 1] = cns.imag
                 Y[i, :, :, 1] = (np.abs(cn) / np.abs(cs)) / (1 + np.abs(cn) / np.abs(cs))
 
-                # X[i, :, :, 1] = np.arctan2(cns.imag, cns.real)
-                # Y[i, :, :, 1] = np.arctan2(cs.imag, cs.real)
+                #X[i, :, :, 1] = np.arctan2(cns.imag, cns.real) #/ np.max(np.abs(np.arctan2(cns.imag, cns.real)))
+                #Y[i, :, :, 1] = np.arctan2(cs.imag, cs.real) / np.max(np.abs(np.arctan2(cs.imag, cs.real)))
 
+                #Y[i, :, :, 1] = np.abs(cn) / (np.abs(cs) + np.abs(cn))
+                #Y[i, :, :, 1] = (Y[i, :, :, 1] - np.mean(Y[i, :, :, 1])) / np.std(Y[i, :, :, 1])
+
+                # Replace nan and inf values
                 Y[i, :, :, 1] = np.nan_to_num(Y[i, :, :, 1])
-            else:
-                msg = "Channel number cannot exceed 2."
+            elif self.channels > 2:
+                msg = "Channel number cannot exceed 2.\nYour number of channels is {}".format(self.channels)
                 raise ValueError(msg)
 
         return X, Y
@@ -476,10 +492,10 @@ class DataGenerator(Sequence):
 
 if __name__ == "__main__":
 
-    #"/home/geophysik/Schreibtisch/denoiser_data/"
+    # "/home/geophysik/Schreibtisch/denoiser_data/"
 
-    signal_files = glob.glob("/rscratch/minos14/janis/dae_noise_data/signal/*")[:600]
-    noise_files = "/rscratch/minos14/janis/dae_noise_data/noise/*/*"
+    signal_files = glob.glob("/home/geophysik/dae_noise_data/signal/*")[:60000]
+    noise_files = "/home/geophysik/dae_noise_data/noise/*/*/*"
 
     callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=10, verbose=1),
                  tf.keras.callbacks.ModelCheckpoint(filepath="./checkpoints/latest_checkpoint.ckpt",
@@ -492,7 +508,7 @@ if __name__ == "__main__":
 
     m = Model(ts_length=6001, use_bias=False, activation=None, drop_rate=0.001, channels=2, optimizer=optimizer,
               loss='mean_squared_error', callbacks=callbacks,
-              dt=0.01, decimation_factor=2, cwt=True, yshape=50)
+              dt=0.01, decimation_factor=4, cwt=True, yshape=50)
     m.build_model(filter_root=8, depth=6, fully_connected=False, max_pooling=False)
     m.summarize()
     m.train_model_generator(signal_file=signal_files, noise_file=noise_files, batch_size=40, epochs=350)

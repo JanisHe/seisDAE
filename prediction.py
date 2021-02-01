@@ -174,6 +174,8 @@ def predict_test_dataset(model_filename, config_filename, signal_list, noise_lis
     true_signal = []
     true_noise = []
     noisy_signal = []
+    p_samp = []
+    s_samp = []
 
     # Read config file
     config = load_obj(config_filename)
@@ -182,13 +184,15 @@ def predict_test_dataset(model_filename, config_filename, signal_list, noise_lis
     for i, s in enumerate(signal_list):
         # Read signal
         signal = np.load(s)
-        signal = signal.f.data[:config['ts_length']]
-
         # XXX Read P- and S-arrival if available
+        p_samp.append(signal["itp"])
+        s_samp.append(signal["its"])
+
+        signal = signal["data"][:config['ts_length']]
 
         # Read noise data
         noise = np.load("{}".format(noise_list[random.randint(0, len(noise_list) - 1)]))
-        noise = noise.f.data[:config['ts_length']]
+        noise = noise["data"][:config['ts_length']]
 
         # Add noise and signal
         ns = signal + noise
@@ -207,14 +211,17 @@ def predict_test_dataset(model_filename, config_filename, signal_list, noise_lis
         if config['decimation_factor'] is not None:
             tr_ns = obspy.Trace(data=noisy_signal[i], header=dict(delta=config['dt']))
             tr_ns.decimate(factor=config['decimation_factor'])
+            tr_ns.filter("highpass", freq=0.5)
             noisy_signal[i] = tr_ns.data
 
             tr_ts = obspy.Trace(data=true_signal[i], header=dict(delta=config['dt']))
             tr_ts.decimate(factor=config['decimation_factor'])
+            tr_ts.filter("highpass", freq=0.5)
             true_signal[i] = tr_ts.data
 
             tr_n = obspy.Trace(data=true_noise[i], header=dict(delta=config['dt']))
             tr_n.decimate(factor=config['decimation_factor'])
+            tr_n.filter("highpass", freq=0.5)
             true_noise[i] = tr_n.data
 
             dt = tr_ts.stats.delta
@@ -247,11 +254,15 @@ def predict_test_dataset(model_filename, config_filename, signal_list, noise_lis
         ax4 = fig.add_subplot(324, sharex=ax1, sharey=ax2)
         ax4.plot(t_waveform, true_signal[i], alpha=0.5, color="k", label="True Signal")
         ax4.plot(t_waveform, recovered[i, :, 0], alpha=0.5, color="r", label="Denoised Signal")
+        ax4.plot([p_samp[i]*dt, p_samp[i]*dt], [-1, 1], color="r")
+        ax4.plot([s_samp[i]*dt, s_samp[i]*dt], [-1, 1], color="b")
         plt.legend()
 
         ax6 = fig.add_subplot(326, sharex=ax1, sharey=ax2)
         ax6.plot(t_waveform, true_noise[i], alpha=0.5, color="k", label="True Noise")
         ax6.plot(t_waveform, recovered[i, :, 1], alpha=0.5, color="r", label="Recovered Noise")
+        ylim = np.max(np.abs(true_noise[i]))
+        ax6.set_ylim(-ylim, ylim)
         plt.legend()
 
         plt.show()
@@ -262,11 +273,11 @@ def predict_test_dataset(model_filename, config_filename, signal_list, noise_lis
 if __name__ == "__main__":
     import glob
     from model import Model
-    signal_list = glob.glob("/rscratch/minos14/janis/dae_noise_data/signal/*")[:10]
-    noise_list = glob.glob("/rscratch/minos14/janis/dae_noise_data/noise/*/*")[:10]
-    signal_test_list = glob.glob("/rscratch/minos14/janis/cwt_denoiser_test_data/*")
+    signal_list = glob.glob("/home/geophysik/dae_noise_data/signal/*")[:10]
+    noise_list = glob.glob("/home/geophysik/dae_noise_data/noise/*/*/*")[:10]
+    signal_test_list = glob.glob("/home/geophysik/cwt_denoiser_test_data/*")
 
-    model = "/rscratch/minos14/janis/cwt_denoiser/Models/2021-01-22_stft.h5"  # checkpoints/latest_checkpoint.ckpt"
-    config = "/rscratch/minos14/janis/cwt_denoiser/config/2021-01-22_stft.config"
+    model = "/home/geophysik/Schreibtisch/cwt_denoiser/checkpoints/latest_checkpoint.ckpt"
+    config = "/home/geophysik/Schreibtisch/cwt_denoiser/config/tmp.config"
 
-    predict_test_dataset(model, config, signal_list, noise_list, ckpt_model=False)
+    predict_test_dataset(model, config, signal_list, noise_list, ckpt_model=True)
