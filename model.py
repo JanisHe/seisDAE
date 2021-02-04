@@ -17,7 +17,7 @@ import tensorflow as tf
 from tensorflow.keras.utils import Sequence
 from tensorflow.keras.models import Model as tfmodel
 from tensorflow.keras.layers import Input, Conv2D, BatchNormalization, ReLU, Dropout, Conv2DTranspose, Cropping2D, \
-    MaxPooling2D, UpSampling2D, Dense, Softmax, Flatten, Reshape
+    MaxPooling2D, UpSampling2D, Dense, Softmax, Flatten, Reshape, Add
 
 from pycwt import pycwt
 from utils import save_obj
@@ -136,8 +136,8 @@ class Model:
 
         # Empty dict to save shape for each layer
         layer_shapes = dict()
+        convs = []
 
-        # XXX Dropout just in Decoder???
         # Encoder
         h = Conv2D(filter_root, kernel_size, activation=self.activation, padding='same',
                    use_bias=self.use_bias)(input_layer)
@@ -150,7 +150,7 @@ class Model:
                        use_bias=self.use_bias)(h)
             h = ReLU()(h)
             h = BatchNormalization()(h)
-            h = Dropout(rate=self.drop_rate)(h)
+            # h = Dropout(rate=self.drop_rate)(h)
 
             h = Conv2D(int(2**i * filter_root), kernel_size, activation=self.activation, padding='same',
                        use_bias=self.use_bias, strides=strides)(h)
@@ -163,6 +163,7 @@ class Model:
             h = Dropout(rate=self.drop_rate)(h)
 
             layer_shapes.update({i: (h.shape[1], h.shape[2])})
+            convs.append(h)
 
         # Fully Connected Layer
         if fully_connected is True:
@@ -197,6 +198,7 @@ class Model:
             h = Dropout(rate=self.drop_rate)(h)
             crop = cropping_layer(needed_shape, is_shape=(h.shape[1], h.shape[2]))
             h = Cropping2D(cropping=(crop[0], crop[1]))(h)
+            h = Add()([convs[i], h])
 
         h = Conv2DTranspose(filter_root, kernel_size, activation=self.activation, padding="same",
                             use_bias=self.use_bias)(h)
@@ -264,8 +266,10 @@ class Model:
         # Save fully trained model
         if self.cwt is False:
             self.model.save("{}/{}_stft.h5".format(pathname_model, str(date.today())), overwrite=True)
+            print("Saved Model as {}/{}_stft.h5".format(pathname_model, str(date.today())))
         elif self.cwt is True:
             self.model.save("{}/{}_cwt.h5".format(pathname_model, str(date.today())), overwrite=True)
+            print("Saved Model as {}/{}_cwt.h5".format(pathname_model, str(date.today())))
 
 
     def train_model_generator(self, signal_file, noise_file,
@@ -435,6 +439,7 @@ class DataGenerator(Sequence):
             signal *= rand_signal
             noise *= rand_noise
             noisy_signal = signal + noise
+            #noisy_signal = rand_signal * signal + rand_noise * noise
 
             # Normalize Signal and Noise
             norm = np.max(np.abs(noisy_signal))
@@ -494,8 +499,8 @@ if __name__ == "__main__":
 
     # "/home/geophysik/Schreibtisch/denoiser_data/"
 
-    signal_files = glob.glob("/home/geophysik/dae_noise_data/signal/*")[:60000]
-    noise_files = "/home/geophysik/dae_noise_data/noise/*/*/*"
+    signal_files = glob.glob("/home/geophysik/dae_noise_data/signal/*")[:40000]
+    noise_files = "/home/geophysik/dae_noise_data/noise/BAVN/pure_noise/*"
 
     callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=10, verbose=1),
                  tf.keras.callbacks.ModelCheckpoint(filepath="./checkpoints/latest_checkpoint.ckpt",
@@ -506,12 +511,12 @@ if __name__ == "__main__":
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-7, amsgrad=False,
                                          name='Adam')
 
-    m = Model(ts_length=6001, use_bias=False, activation=None, drop_rate=0.001, channels=2, optimizer=optimizer,
-              loss='mean_squared_error', callbacks=callbacks,
-              dt=0.01, decimation_factor=4, cwt=True, yshape=50)
+    m = Model(ts_length=6001, use_bias=False, activation=None, drop_rate=0.1, channels=2, optimizer=optimizer,
+              loss='binary_crossentropy', callbacks=callbacks,
+              dt=0.01, decimation_factor=None, cwt=False, nfft=61, nperseg=31)
     m.build_model(filter_root=8, depth=6, fully_connected=False, max_pooling=False)
     m.summarize()
-    m.train_model_generator(signal_file=signal_files, noise_file=noise_files, batch_size=40, epochs=350)
+    m.train_model_generator(signal_file=signal_files, noise_file=noise_files, batch_size=40, epochs=150)
     m.save_model()
     m.plot_history()
 

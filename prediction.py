@@ -254,14 +254,15 @@ def predict_test_dataset(model_filename, config_filename, signal_list, noise_lis
         ax4 = fig.add_subplot(324, sharex=ax1, sharey=ax2)
         ax4.plot(t_waveform, true_signal[i], alpha=0.5, color="k", label="True Signal")
         ax4.plot(t_waveform, recovered[i, :, 0], alpha=0.5, color="r", label="Denoised Signal")
-        ax4.plot([p_samp[i]*dt, p_samp[i]*dt], [-1, 1], color="r")
-        ax4.plot([s_samp[i]*dt, s_samp[i]*dt], [-1, 1], color="b")
+        ax4.plot([p_samp[i]*config['dt'], p_samp[i]*config['dt']], [-1, 1], color="r")
+        ax4.plot([s_samp[i]*config['dt'], s_samp[i]*config['dt']], [-1, 1], color="b")
         plt.legend()
 
         ax6 = fig.add_subplot(326, sharex=ax1, sharey=ax2)
         ax6.plot(t_waveform, true_noise[i], alpha=0.5, color="k", label="True Noise")
         ax6.plot(t_waveform, recovered[i, :, 1], alpha=0.5, color="r", label="Recovered Noise")
-        ylim = np.max(np.abs(true_noise[i]))
+        ylim = max([np.max(np.abs(true_signal[i])), np.max(np.abs(recovered[i, :, 0])),
+                    np.max(np.abs(recovered[i, :, 1])), np.max(np.abs(true_noise[i]))])
         ax6.set_ylim(-ylim, ylim)
         plt.legend()
 
@@ -277,7 +278,7 @@ if __name__ == "__main__":
     noise_list = glob.glob("/home/geophysik/dae_noise_data/noise/*/*/*")[:10]
     signal_test_list = glob.glob("/home/geophysik/cwt_denoiser_test_data/*")
 
-    model = "/home/geophysik/Schreibtisch/cwt_denoiser/checkpoints/latest_checkpoint.ckpt"
-    config = "/home/geophysik/Schreibtisch/cwt_denoiser/config/tmp.config"
+    model = "/home/geophysik/Schreibtisch/cwt_denoiser/Models/2021-02-03_cwt.h5"
+    config = "/home/geophysik/Schreibtisch/cwt_denoiser/config/2021-02-03_cwt.config"
 
-    predict_test_dataset(model, config, signal_list, noise_list, ckpt_model=True)
+    predict_test_dataset(model, config, signal_list, noise_list, ckpt_model=False)
