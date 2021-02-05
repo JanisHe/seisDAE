@@ -109,13 +109,13 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
 
         # Write data to empty np arrays
         # X[i, :, :, 0] = np.abs(cns)
-        X[i, :, :, 0] = cns.real
+        X[i, :, :, 0] = cns.real / np.max(np.abs(cns.real))
 
         if config['channels'] == 1:
             phases.append(np.arctan2(cns.imag, cns.real))
         elif config['channels'] == 2:
             # X[i, :, :, 1] = np.arctan2(cns.imag, cns.real)
-            X[i, :, :, 1] = cns.imag
+            X[i, :, :, 1] = cns.imag / np.max(np.abs(cns.imag))
         else:
             msg = "Channel number cannot exceed 2."
             raise ValueError(msg)
@@ -278,7 +278,7 @@ if __name__ == "__main__":
     noise_list = glob.glob("/home/geophysik/dae_noise_data/noise/*/*/*")[:10]
     signal_test_list = glob.glob("/home/geophysik/cwt_denoiser_test_data/*")
 
-    model = "/home/geophysik/Schreibtisch/cwt_denoiser/Models/2021-02-03_cwt.h5"
-    config = "/home/geophysik/Schreibtisch/cwt_denoiser/config/2021-02-03_cwt.config"
+    model = "/home/geophysik/Schreibtisch/cwt_denoiser/Models/2021-02-05_stft.h5"
+    config = "/home/geophysik/Schreibtisch/cwt_denoiser/config/2021-02-05_stft.config"
 
     predict_test_dataset(model, config, signal_list, noise_list, ckpt_model=False)
