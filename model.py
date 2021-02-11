@@ -29,10 +29,8 @@ def cwt_wrapper(x, dt=1.0, yshape=150, **kwargs):
     # Remove mean from x
     x = x - np.mean(x)
 
-    # Frequencies for CWT with numpy logspace
-    # XXX Effect of logspace instead of linspace ????
-    #freqs = np.logspace(start=np.log10(dt), stop=np.log10(1 / (2 * dt)), num=yshape)
-    freqs = np.linspace(dt, 1 / (2 * dt), yshape)
+    # Frequencies for CWT with numpy logspace (linspace leads to false recovered signal by icwt)
+    freqs = np.logspace(start=np.log10(dt), stop=np.log10(1 / (2 * dt)), num=yshape)
 
     # Transforming x to TF-doamin
     coeffs, scales, freqs_x, _, _, _ = pycwt.cwt(x, dt=dt, freqs=freqs, **kwargs)
@@ -40,7 +38,7 @@ def cwt_wrapper(x, dt=1.0, yshape=150, **kwargs):
     # Estimate dj as eq (9) & (10) in Torrence & Compo
     dj = 1 / yshape * np.log2(len(x) * dt / np.min(scales))
 
-    return coeffs, scales, dj, freqs
+    return coeffs, scales, dj, freqs_x
 
 
 def cropping_layer(needed_shape, is_shape):
@@ -448,6 +446,7 @@ class DataGenerator(Sequence):
             # Zhu et al, 2018
             X[i, :, :, 0] = cns.real / np.max(np.abs(cns.real))
             Y[i, :, :, 0] = 1 / (1 + np.abs(cn) / np.abs(cs))
+            # Y[i, :, :, 0] = 1 / (1 + cn / cs)
 
             # X[i, :, :, 0] = np.abs(cns) / (np.max(np.abs(cn)) + np.max(np.abs(cns)))
             #Y[i, :, :, 0] = np.abs(cs) / (np.max(np.abs(cn)) + np.max(np.abs(cns)))
@@ -464,6 +463,7 @@ class DataGenerator(Sequence):
                 # Zhu et al, 2018
                 X[i, :, :, 1] = cns.imag / np.max(np.abs(cns.imag))
                 Y[i, :, :, 1] = (np.abs(cn) / np.abs(cs)) / (1 + np.abs(cn) / np.abs(cs))
+                # Y[i, :, :, 1] = (cn / cs) / (1 + cn / cs)
 
                 #X[i, :, :, 1] = np.arctan2(cns.imag, cns.real) #/ np.max(np.abs(np.arctan2(cns.imag, cns.real)))
                 #Y[i, :, :, 1] = np.arctan2(cs.imag, cs.real) / np.max(np.abs(np.arctan2(cs.imag, cs.real)))
@@ -499,10 +499,10 @@ if __name__ == "__main__":
 
     m = Model(ts_length=6001, use_bias=False, activation=None, drop_rate=0.1, channels=2, optimizer=optimizer,
               loss='binary_crossentropy', callbacks=callbacks,
-              dt=0.01, decimation_factor=2, cwt=True, yshape=100)
-    m.build_model(filter_root=8, depth=7, fully_connected=False, max_pooling=False, strides=(2, 2))
+              dt=0.01, decimation_factor=2, cwt=True, yshape=200)
+    m.build_model(filter_root=8, depth=8, fully_connected=False, max_pooling=False, strides=(2, 2))
     m.summarize()
-    m.train_model_generator(signal_file=signal_files, noise_file=noise_files, batch_size=16, epochs=200)
+    m.train_model_generator(signal_file=signal_files, noise_file=noise_files, batch_size=8, epochs=60)
     m.save_model()
     m.plot_history()
 
