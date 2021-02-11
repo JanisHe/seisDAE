@@ -13,7 +13,7 @@ from pycwt import pycwt
 def langston_mousavi(x, noise, dt=1.0,
                      fmin=None, fmax=None, num=100,
                      wavelet="morlet", soft=True,
-                     mode="empirical", quantile=0.99):
+                     mode="empirical", quantile=0.99, freqs_log=True):
     """
     CWT denoising via thresholding functions. Array x is denoised via thresholding function
     that is definded by noise.
@@ -52,7 +52,10 @@ def langston_mousavi(x, noise, dt=1.0,
     noise = noise - np.mean(noise)
 
     # Frequencies for CWT with numpy logspace
-    freqs = np.logspace(start=np.log10(dt), stop=np.log10(1 / (2 * dt)), num=num)
+    if freqs_log is True:
+        freqs = np.logspace(start=np.log10(dt), stop=np.log10(1 / (2 * dt)), num=num)
+    else:
+        freqs = np.linspace(start=dt, stop=1 / (2 * dt), num=num)
 
     # Transforming x to TF-doamin
     cwt_x, scales_x, freqs_x, _, _, _ = pycwt.cwt(x, dt=dt, freqs=freqs, wavelet=wavelet)
