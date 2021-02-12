@@ -206,7 +206,7 @@ class Model:
 
         # Output layer
         h = Conv2D(filters=self.channels, kernel_size=(1, 1), activation=self.activation, use_bias=self.use_bias,
-                   padding="same", kernel_regularizer=L2(0.01))(h)
+                   padding="same", **kwargs)(h)
         h = Softmax()(h)
 
         # Build model and compile Model
@@ -485,7 +485,7 @@ if __name__ == "__main__":
 
     # "/home/geophysik/Schreibtisch/denoiser_data/"
 
-    signal_files = glob.glob("/home/geophysik/dae_noise_data/signal/*")[:60000]
+    signal_files = glob.glob("/home/geophysik/dae_noise_data/signal/*")[:10000]
     noise_files = "/home/geophysik/dae_noise_data/noise/BAVN/pure_noise/*"
 
     callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=20, verbose=1),
@@ -496,11 +496,13 @@ if __name__ == "__main__":
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-7, amsgrad=False,
                                          name='Adam')
+    kernel_regularizer = L2(0.01)
 
     m = Model(ts_length=6001, use_bias=False, activation=None, drop_rate=0.1, channels=2, optimizer=optimizer,
               loss='binary_crossentropy', callbacks=callbacks,
-              dt=0.01, decimation_factor=2, cwt=True, yshape=200)
-    m.build_model(filter_root=8, depth=8, fully_connected=False, max_pooling=False, strides=(2, 2))
+              dt=0.01, decimation_factor=None, cwt=False, nfft=500, nperseg=31)
+    m.build_model(filter_root=8, depth=8, fully_connected=False, max_pooling=False, strides=(2, 2),
+                  kernel_regularizer=kernel_regularizer)
     m.summarize()
     m.train_model_generator(signal_file=signal_files, noise_file=noise_files, batch_size=8, epochs=60)
     m.save_model()
