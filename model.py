@@ -142,7 +142,7 @@ class Model:
         h = Conv2D(filter_root, kernel_size, activation=self.activation, padding='same',
                    use_bias=self.use_bias, **kwargs)(input_layer)
         h = BatchNormalization()(h)
-        h = ReLU()(h)
+        # h = ReLU()(h)
         h = Dropout(rate=self.drop_rate)(h)
 
         # More Layers
@@ -150,7 +150,7 @@ class Model:
             h = Conv2D(int(2**i * filter_root), kernel_size, activation=self.activation, padding='same',
                        use_bias=self.use_bias, **kwargs)(h)
             h = BatchNormalization()(h)
-            h = ReLU()(h)
+            # h = ReLU()(h)
             h = Dropout(rate=self.drop_rate)(h)
 
             layer_shapes.update({i: (h.shape[1], h.shape[2])})
@@ -164,7 +164,7 @@ class Model:
                     h = MaxPooling2D(pool_size=pool_size, padding="same")(h)
 
                 h = BatchNormalization()(h)
-                h = ReLU()(h)
+                # h = ReLU()(h)
                 h = Dropout(rate=self.drop_rate)(h)
 
         # Fully Connected Layer
@@ -189,7 +189,7 @@ class Model:
                 h = Conv2DTranspose(int(2 ** i * filter_root), kernel_size, activation=self.activation, padding='same',
                                     use_bias=self.use_bias, strides=strides, **kwargs)(h)
             h = BatchNormalization()(h)
-            h = ReLU()(h)
+            # h = ReLU()(h)
             h = Dropout(rate=self.drop_rate)(h)
 
             # Crop network and add skip connections
@@ -201,7 +201,7 @@ class Model:
             h = Conv2D(int(2 ** i * filter_root), kernel_size, activation=self.activation, padding='same',
                        use_bias=self.use_bias, **kwargs)(h)
             h = BatchNormalization()(h)
-            h = ReLU()(h)
+            # h = ReLU()(h)
             h = Dropout(rate=self.drop_rate)(h)
 
         # Output layer
@@ -486,7 +486,7 @@ if __name__ == "__main__":
     # "/home/geophysik/Schreibtisch/denoiser_data/"
 
     signal_files = glob.glob("/home/geophysik/dae_noise_data/signal/*")[:10000]
-    noise_files = "/home/geophysik/dae_noise_data/noise/BAVN/pure_noise/*"
+    noise_files = "/home/geophysik/dae_noise_data/noise/WEA2/*/*"
 
     callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=20, verbose=1),
                  tf.keras.callbacks.ModelCheckpoint(filepath="./checkpoints/latest_checkpoint.ckpt",
@@ -496,15 +496,15 @@ if __name__ == "__main__":
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-7, amsgrad=False,
                                          name='Adam')
-    kernel_regularizer = L2(0.01)
+    kernel_regularizer = L2(0)
 
-    m = Model(ts_length=6001, use_bias=False, activation=None, drop_rate=0.1, channels=2, optimizer=optimizer,
+    m = Model(ts_length=6001, use_bias=False, activation="relu", drop_rate=0.1, channels=2, optimizer=optimizer,
               loss='binary_crossentropy', callbacks=callbacks,
-              dt=0.01, decimation_factor=None, cwt=False, nfft=500, nperseg=31)
-    m.build_model(filter_root=8, depth=8, fully_connected=False, max_pooling=False, strides=(2, 2),
+              dt=0.01, decimation_factor=None, cwt=False, nfft=198, nperseg=99)
+    m.build_model(filter_root=6, depth=8, fully_connected=False, max_pooling=False, strides=(2, 2),
                   kernel_regularizer=kernel_regularizer)
     m.summarize()
-    m.train_model_generator(signal_file=signal_files, noise_file=noise_files, batch_size=8, epochs=60)
+    m.train_model_generator(signal_file=signal_files, noise_file=noise_files, batch_size=8, epochs=100)
     m.save_model()
     m.plot_history()
 
