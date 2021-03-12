@@ -15,10 +15,9 @@ from datetime import date
 from scipy.signal import stft, istft
 import tensorflow as tf
 from tensorflow.keras.utils import Sequence
-from tensorflow.keras.models import Model as tfmodel
+from tensorflow.keras.models import Model as TFmodel
 from tensorflow.keras.layers import Input, Conv2D, BatchNormalization, ReLU, Dropout, Conv2DTranspose, Cropping2D, \
     MaxPooling2D, UpSampling2D, Dense, Softmax, Flatten, Reshape, Add
-from tensorflow.keras.regularizers import L2
 
 from pycwt import pycwt
 from utils import save_obj
@@ -29,14 +28,19 @@ def cwt_wrapper(x, dt=1.0, yshape=150, **kwargs):
     # Remove mean from x
     x = x - np.mean(x)
 
-    # Frequencies for CWT with numpy logspace (linspace leads to false recovered signal by icwt)
-    freqs = np.logspace(start=np.log10(dt), stop=np.log10(1 / (2 * dt)), num=yshape)
+    try:
+        wavl = pycwt.wavelet._check_parameter_wavelet(kwargs['wavelet'])
+    except KeyError:
+        wavl = pycwt.wavelet._check_parameter_wavelet(wavelet='morlet')
 
-    # Transforming x to TF-doamin
-    coeffs, scales, freqs_x, _, _, _ = pycwt.cwt(x, dt=dt, freqs=freqs, **kwargs)
+    # Determine smallest resolvable scale
+    s0 = 2 * dt / wavl.flambda()
 
     # Estimate dj as eq (9) & (10) in Torrence & Compo
-    dj = 1 / yshape * np.log2(len(x) * dt / np.min(scales))
+    dj = 1 / yshape * np.log2(len(x) * dt / s0)
+
+    # Transforming x to TF-doamin
+    coeffs, scales, freqs_x, _, _, _ = pycwt.cwt(x, dt=dt, dj=dj, J=yshape - 1, s0=s0)
 
     return coeffs, scales, dj, freqs_x
 
@@ -93,7 +97,6 @@ class Model:
         self.fully_connected = None
         self.max_pooling = None
 
-
         dummy = obspy.Trace(data=np.random.rand(ts_length), header=dict(delta=self.dt))
         if decimation_factor:
             dummy.decimate(factor=decimation_factor)
@@ -130,88 +133,90 @@ class Model:
             pool_size = copy.copy(strides)
             strides = (1, 1)
 
-        # Define Input layer
-        input_layer = Input((self.shape[0], self.shape[1], self.channels))
+        # Run Model on mutiple GPUs
+        mirrored_strategy = tf.distribute.MirroredStrategy()
+        with mirrored_strategy.scope():
+            # Define Input layer
+            input_layer = Input((self.shape[0], self.shape[1], self.channels))
 
-        # Empty dict to save shape for each layer
-        layer_shapes = dict()
-        convs = []
+            # Empty dict to save shape for each layer
+            layer_shapes = dict()
+            convs = []
 
-        # Encoder
-        # First Layer
-        h = Conv2D(filter_root, kernel_size, activation=self.activation, padding='same',
-                   use_bias=self.use_bias, **kwargs)(input_layer)
-        h = BatchNormalization()(h)
-        # h = ReLU()(h)
-        h = Dropout(rate=self.drop_rate)(h)
-
-        # More Layers
-        for i in range(depth):
-            h = Conv2D(int(2**i * filter_root), kernel_size, activation=self.activation, padding='same',
-                       use_bias=self.use_bias, **kwargs)(h)
+            # Encoder
+            # First Layer
+            h = Conv2D(filter_root, kernel_size, activation=self.activation, padding='same',
+                       use_bias=self.use_bias, **kwargs)(input_layer)
             h = BatchNormalization()(h)
-            # h = ReLU()(h)
+            h = ReLU()(h)
             h = Dropout(rate=self.drop_rate)(h)
 
-            layer_shapes.update({i: (h.shape[1], h.shape[2])})
-            convs.append(h)
-
-            if i < depth - 1:
+            # More Layers
+            for i in range(depth):
                 h = Conv2D(int(2**i * filter_root), kernel_size, activation=self.activation, padding='same',
-                           use_bias=self.use_bias, strides=strides, **kwargs)(h)
-
-                if max_pooling is True:
-                    h = MaxPooling2D(pool_size=pool_size, padding="same")(h)
-
+                           use_bias=self.use_bias, **kwargs)(h)
                 h = BatchNormalization()(h)
-                # h = ReLU()(h)
+                h = ReLU()(h)
                 h = Dropout(rate=self.drop_rate)(h)
 
-        # Fully Connected Layer
-        if fully_connected is True:
-            conv_shape = tuple(h.shape[1:])
-            h = Flatten()(h)
-            flatten_shape = h.shape[1]
-            h = Dense(units=flatten_shape, activation=self.activation, use_bias=self.use_bias)(h)
-            h = Dense(units=int(flatten_shape / 10), activation=self.activation, use_bias=self.use_bias)(h)
-            h = Dense(units=flatten_shape, activation=self.activation, use_bias=self.use_bias)(h)
-            h = Reshape(target_shape=conv_shape)(h)
+                layer_shapes.update({i: (h.shape[1], h.shape[2])})
+                convs.append(h)
 
-        # Decoder
-        for i in range(depth - 2, -1, -1):
-            needed_shape = layer_shapes[i]
+                if i < depth - 1:
+                    h = Conv2D(int(2**i * filter_root), kernel_size, activation=self.activation, padding='same',
+                               use_bias=self.use_bias, strides=strides, **kwargs)(h)
 
-            if max_pooling is True:
+                    if max_pooling is True:
+                        h = MaxPooling2D(pool_size=pool_size, padding="same")(h)
+
+                    h = BatchNormalization()(h)
+                    h = ReLU()(h)
+                    h = Dropout(rate=self.drop_rate)(h)
+
+            # Fully Connected Layer
+            if fully_connected is True:
+                conv_shape = tuple(h.shape[1:])
+                h = Flatten()(h)
+                flatten_shape = h.shape[1]
+                h = Dense(units=flatten_shape, activation=self.activation, use_bias=self.use_bias)(h)
+                h = Dense(units=int(flatten_shape / 10), activation=self.activation, use_bias=self.use_bias)(h)
+                h = Dense(units=flatten_shape, activation=self.activation, use_bias=self.use_bias)(h)
+                h = Reshape(target_shape=conv_shape)(h)
+
+            # Decoder
+            for i in range(depth - 2, -1, -1):
+                needed_shape = layer_shapes[i]
+
+                if max_pooling is True:
+                    h = Conv2D(int(2 ** i * filter_root), kernel_size, activation=self.activation, padding='same',
+                               use_bias=self.use_bias, strides=strides, **kwargs)(h)
+                    h = UpSampling2D(size=pool_size)(h)
+                elif max_pooling is False:
+                    h = Conv2DTranspose(int(2 ** i * filter_root), kernel_size, activation=self.activation, padding='same',
+                                        use_bias=self.use_bias, strides=strides, **kwargs)(h)
+                h = BatchNormalization()(h)
+                h = ReLU()(h)
+                h = Dropout(rate=self.drop_rate)(h)
+
+                # Crop network and add skip connections
+                crop = cropping_layer(needed_shape, is_shape=(h.shape[1], h.shape[2]))
+                h = Cropping2D(cropping=(crop[0], crop[1]))(h)
+                h = Add()([convs[i], h])   # XXX Check if connections are correct
+
                 h = Conv2D(int(2 ** i * filter_root), kernel_size, activation=self.activation, padding='same',
-                           use_bias=self.use_bias, strides=strides, **kwargs)(h)
-                h = UpSampling2D(size=pool_size)(h)
-            elif max_pooling is False:
-                h = Conv2DTranspose(int(2 ** i * filter_root), kernel_size, activation=self.activation, padding='same',
-                                    use_bias=self.use_bias, strides=strides, **kwargs)(h)
-            h = BatchNormalization()(h)
-            # h = ReLU()(h)
-            h = Dropout(rate=self.drop_rate)(h)
+                           use_bias=self.use_bias, **kwargs)(h)
+                h = BatchNormalization()(h)
+                h = ReLU()(h)
+                h = Dropout(rate=self.drop_rate)(h)
 
-            # Crop network and add skip connections
-            crop = cropping_layer(needed_shape, is_shape=(h.shape[1], h.shape[2]))
-            h = Cropping2D(cropping=(crop[0], crop[1]))(h)
-            h = Add()([convs[i], h])
+            # Output layer
+            h = Conv2D(filters=self.channels, kernel_size=(1, 1), activation=self.activation, use_bias=self.use_bias,
+                       padding="same", **kwargs)(h)
+            h = Softmax()(h)
 
-
-            h = Conv2D(int(2 ** i * filter_root), kernel_size, activation=self.activation, padding='same',
-                       use_bias=self.use_bias, **kwargs)(h)
-            h = BatchNormalization()(h)
-            # h = ReLU()(h)
-            h = Dropout(rate=self.drop_rate)(h)
-
-        # Output layer
-        h = Conv2D(filters=self.channels, kernel_size=(1, 1), activation=self.activation, use_bias=self.use_bias,
-                   padding="same", **kwargs)(h)
-        h = Softmax()(h)
-
-        # Build model and compile Model
-        self.model = tfmodel(input_layer, h)
-        self.model.compile(optimizer=self.optimizer, loss=self.loss, metrics=['accuracy'])
+            # Build model and compile Model
+            self.model = TFmodel(input_layer, h)
+            self.model.compile(optimizer=self.optimizer, loss=self.loss, metrics=['accuracy'])
 
 
     def summarize(self):
@@ -258,7 +263,7 @@ class Model:
 
     def train_model_generator(self, signal_file, noise_file,
                               epochs=50, batch_size=20, validation_split=0.15, verbose=1,
-                              workers=8, use_multiprocessing=True):
+                              workers=8, use_multiprocessing=True, max_queue_size=10):
 
         # Save config file in config directory as tmp.config
         self.save_config(pathname="./config", filename="tmp.config")
@@ -287,7 +292,7 @@ class Model:
         self.history = self.model.fit(x=generator_train, epochs=epochs, workers=workers,
                                       use_multiprocessing=use_multiprocessing,
                                       verbose=verbose, validation_data=generator_validate,
-                                      callbacks=self.callbacks)
+                                      callbacks=self.callbacks, max_queue_size=max_queue_size,)
 
         # Remove temporary config file
         os.remove("./config/tmp.config")
@@ -360,8 +365,8 @@ class DataGenerator(Sequence):
         return self.__data_generation()
 
     def __data_generation(self):
-        X = np.empty(shape=(self.batch_size, *self.shape, self.channels), dtype="float")   # Empty input data
-        Y = np.empty(shape=(self.batch_size, *self.shape, self.channels), dtype="float")   # Empty target data
+        X = np.empty(shape=(self.batch_size, *self.shape, self.channels), dtype="float16")   # Empty input data
+        Y = np.empty(shape=(self.batch_size, *self.shape, self.channels), dtype="float16")   # Empty target data
 
         for i in range(self.batch_size):
             signal_filename = "{}".format(self.signal_list[random.randint(0, len(self.signal_list) - 1)])
@@ -423,7 +428,6 @@ class DataGenerator(Sequence):
             signal *= rand_signal
             noise *= rand_noise
             noisy_signal = signal + noise
-            #noisy_signal = rand_signal * signal + rand_noise * noise
 
             # Normalize Signal and Noise
             norm = np.max(np.abs(noisy_signal))
@@ -446,15 +450,6 @@ class DataGenerator(Sequence):
             # Zhu et al, 2018
             X[i, :, :, 0] = cns.real / np.max(np.abs(cns.real))
             Y[i, :, :, 0] = 1 / (1 + np.abs(cn) / np.abs(cs))
-            # Y[i, :, :, 0] = 1 / (1 + cn / cs)
-
-            # X[i, :, :, 0] = np.abs(cns) / (np.max(np.abs(cn)) + np.max(np.abs(cns)))
-            #Y[i, :, :, 0] = np.abs(cs) / (np.max(np.abs(cn)) + np.max(np.abs(cns)))
-
-            # X[i, :, :, 0] = np.abs(cns)
-            # Y[i, :, :, 0] = np.abs(cs) / np.abs(cns)
-            #Y[i, :, :, 0] = np.abs(cs) / (np.abs(cs) + np.abs(cn))
-            #Y[i, :, :, 0] = (Y[i, :, :, 0] - np.mean(Y[i, :, :, 0])) / np.std(Y[i, :, :, 0])
 
             # Replace nan and inf values
             Y[i, :, :, 0] = np.nan_to_num(Y[i, :, :, 0])
@@ -463,13 +458,6 @@ class DataGenerator(Sequence):
                 # Zhu et al, 2018
                 X[i, :, :, 1] = cns.imag / np.max(np.abs(cns.imag))
                 Y[i, :, :, 1] = (np.abs(cn) / np.abs(cs)) / (1 + np.abs(cn) / np.abs(cs))
-                # Y[i, :, :, 1] = (cn / cs) / (1 + cn / cs)
-
-                #X[i, :, :, 1] = np.arctan2(cns.imag, cns.real) #/ np.max(np.abs(np.arctan2(cns.imag, cns.real)))
-                #Y[i, :, :, 1] = np.arctan2(cs.imag, cs.real) / np.max(np.abs(np.arctan2(cs.imag, cs.real)))
-
-                #Y[i, :, :, 1] = np.abs(cn) / (np.abs(cs) + np.abs(cn))
-                #Y[i, :, :, 1] = (Y[i, :, :, 1] - np.mean(Y[i, :, :, 1])) / np.std(Y[i, :, :, 1])
 
                 # Replace nan and inf values
                 Y[i, :, :, 1] = np.nan_to_num(Y[i, :, :, 1])
@@ -478,35 +466,3 @@ class DataGenerator(Sequence):
                 raise ValueError(msg)
 
         return X, Y
-
-
-
-if __name__ == "__main__":
-
-    # "/home/geophysik/Schreibtisch/denoiser_data/"
-
-    signal_files = glob.glob("/home/geophysik/dae_noise_data/signal/*")[:10000]
-    noise_files = "/home/geophysik/dae_noise_data/noise/WEA2/*/*"
-
-    callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=20, verbose=1),
-                 tf.keras.callbacks.ModelCheckpoint(filepath="./checkpoints/latest_checkpoint.ckpt",
-                                                    save_weights_only=True, save_best_only=True,
-                                                    period=1, verbose=1)
-                 ]
-
-    optimizer = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-7, amsgrad=False,
-                                         name='Adam')
-    kernel_regularizer = L2(0)
-
-    m = Model(ts_length=6001, use_bias=False, activation="relu", drop_rate=0.1, channels=2, optimizer=optimizer,
-              loss='binary_crossentropy', callbacks=callbacks,
-              dt=0.01, decimation_factor=None, cwt=False, nfft=198, nperseg=99)
-    m.build_model(filter_root=6, depth=8, fully_connected=False, max_pooling=False, strides=(2, 2),
-                  kernel_regularizer=kernel_regularizer)
-    m.summarize()
-    m.train_model_generator(signal_file=signal_files, noise_file=noise_files, batch_size=8, epochs=100)
-    m.save_model()
-    m.plot_history()
-
-
-    # XXX Fully Connected Layer has bad effect on denoising
