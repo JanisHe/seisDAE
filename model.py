@@ -11,7 +11,7 @@ import obspy
 import numpy as np
 import matplotlib.pyplot as plt
 
-from datetime import date
+from datetime import datetime
 from scipy.signal import stft, istft
 import tensorflow as tf
 from tensorflow.keras.utils import Sequence
@@ -96,6 +96,10 @@ class Model:
         self.filter_root = None
         self.fully_connected = None
         self.max_pooling = None
+
+        # Get date and time
+        self.now = datetime.now()
+        self.now_str = self.now.strftime("%d-%m-%Y_%H-%M-%S")
 
         dummy = obspy.Trace(data=np.random.rand(ts_length), header=dict(delta=self.dt))
         if decimation_factor:
@@ -201,7 +205,7 @@ class Model:
                 # Crop network and add skip connections
                 crop = cropping_layer(needed_shape, is_shape=(h.shape[1], h.shape[2]))
                 h = Cropping2D(cropping=(crop[0], crop[1]))(h)
-                h = Add()([convs[i], h])   # XXX Check if connections are correct
+                h = Add()([convs[i], h])
 
                 h = Conv2D(int(2 ** i * filter_root), kernel_size, activation=self.activation, padding='same',
                            use_bias=self.use_bias, **kwargs)(h)
@@ -209,14 +213,14 @@ class Model:
                 h = ReLU()(h)
                 h = Dropout(rate=self.drop_rate)(h)
 
-            # Output layer
-            h = Conv2D(filters=self.channels, kernel_size=(1, 1), activation=self.activation, use_bias=self.use_bias,
-                       padding="same", **kwargs)(h)
-            h = Softmax()(h)
+                # Output layer
+                h = Conv2D(filters=self.channels, kernel_size=(1, 1), activation=self.activation, use_bias=self.use_bias,
+                           padding="same", **kwargs)(h)
+                h = Softmax()(h)
 
-            # Build model and compile Model
-            self.model = TFmodel(input_layer, h)
-            self.model.compile(optimizer=self.optimizer, loss=self.loss, metrics=['accuracy'])
+                # Build model and compile Model
+                self.model = TFmodel(input_layer, h)
+                self.model.compile(optimizer=self.optimizer, loss=self.loss, metrics=['accuracy'])
 
 
     def summarize(self):
@@ -224,12 +228,14 @@ class Model:
 
     def save_config(self, pathname="./config", filename=None):
         if filename:
-            settings_filename = "{}/{}".format(pathname, filename)
+            settings_filename = "{}/{}.config".format(pathname, filename)
         else:
+            self.now = datetime.now()
+            self.now_str = self.now.strftime("%d-%m-%Y_%H-%M-%S")
             if self.cwt is False:
-                settings_filename = "{}/{}_stft.config".format(pathname, str(date.today()))
+                settings_filename = "{}/{}_stft.config".format(pathname, self.now_str)
             elif self.cwt is True:
-                settings_filename = "{}/{}_cwt.config".format(pathname, str(date.today()))
+                settings_filename = "{}/{}_cwt.config".format(pathname, self.now_str)
 
         # Write all important parameters to config file
         if isinstance(self.optimizer, str) is True:
@@ -245,20 +251,30 @@ class Model:
                            max_pooling=self.max_pooling, cwt=self.cwt, kwargs=self.kwargs,
                            data_augmentation=self.data_augmentation)
         save_obj(dictionary=config_dict, filename=settings_filename)
+        print("Save config file as {}".format(settings_filename))
 
-    def save_model(self, pathname_model="./Models", pathname_config="./config"):
+    def save_model(self, pathname_model="./Models", pathname_config="./config", filename=None):
         """
         Save model as .h5 file and write a .txt file with all important settings.
         """
+        # XXX Save model from last checkpoint to prevent overfitting!
         # Save config file
-        self.save_config(pathname=pathname_config)
+        self.save_config(pathname=pathname_config, filename=filename)
         # Save fully trained model
-        if self.cwt is False:
-            self.model.save("{}/{}_stft.h5".format(pathname_model, str(date.today())), overwrite=True)
-            print("Saved Model as {}/{}_stft.h5".format(pathname_model, str(date.today())))
-        elif self.cwt is True:
-            self.model.save("{}/{}_cwt.h5".format(pathname_model, str(date.today())), overwrite=True)
-            print("Saved Model as {}/{}_cwt.h5".format(pathname_model, str(date.today())))
+        if filename:
+            if self.cwt is False:
+                self.model.save("{}/{}_stft.h5".format(pathname_model, filename), overwrite=True)
+                print("Saved Model as {}/{}_stft.h5".format(pathname_model, filename))
+            elif self.cwt is True:
+                self.model.save("{}/{}_cwt.h5".format(pathname_model, filename), overwrite=True)
+                print("Saved Model as {}/{}_cwt.h5".format(pathname_model, filename))
+        else:
+            if self.cwt is False:
+                self.model.save("{}/{}_stft.h5".format(pathname_model, self.now_str), overwrite=True)
+                print("Saved Model as {}/{}_stft.h5".format(pathname_model, self.now_str))
+            elif self.cwt is True:
+                self.model.save("{}/{}_cwt.h5".format(pathname_model, self.now_str), overwrite=True)
+                print("Saved Model as {}/{}_cwt.h5".format(pathname_model, self.now_str))
 
 
     def train_model_generator(self, signal_file, noise_file,
@@ -266,7 +282,8 @@ class Model:
                               workers=8, use_multiprocessing=True, max_queue_size=10):
 
         # Save config file in config directory as tmp.config
-        self.save_config(pathname="./config", filename="tmp.config")
+        filename_tmp_config = "{}_tmp".format(self.now_str)
+        self.save_config(pathname="./config", filename=filename_tmp_config)
 
         # Split value to split data into training and validation datasets
         split = int(len(signal_file) * (1 - validation_split))
@@ -295,12 +312,18 @@ class Model:
                                       callbacks=self.callbacks, max_queue_size=max_queue_size,)
 
         # Remove temporary config file
-        os.remove("./config/tmp.config")
+        os.remove("./config/{}.config".format(filename_tmp_config))
 
-    def plot_history(self, pathname="./figures", plot=True):
+    def plot_history(self, pathname="./figures", plot=True, filename=None):
         """
         Plot loss vs epochs of training and validation
         """
+        # Create name for figure
+        if filename:
+            name = filename
+        else:
+            name = self.now_str
+
         # summarize history for accuracy
         fig_acc = plt.figure()
         plt.plot(self.history.history['accuracy'])
@@ -312,9 +335,9 @@ class Model:
 
         if plot is True:
             if self.cwt is False:
-                plt.savefig("{}/{}_stft_accuracy.png".format(pathname, str(date.today())))
+                plt.savefig("{}/{}_stft_accuracy.png".format(pathname, name))
             elif self.cwt is True:
-                plt.savefig("{}/{}_cwt_accuracy.png".format(pathname, str(date.today())))
+                plt.savefig("{}/{}_cwt_accuracy.png".format(pathname, name))
 
         # summarize history for loss
         fig_loss = plt.figure()
@@ -327,9 +350,9 @@ class Model:
 
         if plot is True:
             if self.cwt is False:
-                plt.savefig("{}/{}_stft_loss.png".format(pathname, str(date.today())))
+                plt.savefig("{}/{}_stft_loss.png".format(pathname, name))
             elif self.cwt is True:
-                plt.savefig("{}/{}_cwt_loss.png".format(pathname, str(date.today())))
+                plt.savefig("{}/{}_cwt_loss.png".format(pathname, name))
 
         if plot is not True:
             return fig_acc, fig_loss
