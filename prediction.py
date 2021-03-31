@@ -11,11 +11,11 @@ from tensorflow.keras.models import load_model
 from scipy.signal import stft, istft
 
 from pycwt import pycwt
-from model import cwt_wrapper, Model
+from model import cwt_wrapper, Model, preprocessing
 from utils import load_obj
 
 
-def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_model=True,):
+def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_model=True):
     """
     Function to predict data in data_list.
 
@@ -42,19 +42,20 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
     # Read tensorflow model
     if ckpt_model is True:
         # Load weights from checkpoint
-        model = Model(ts_length=config['ts_length'], use_bias=config['use_bias'],
-                      activation=config['activation'], drop_rate=config['drop_rate'],
-                      channels=config['channels'], optimizer=optimizer,
-                      loss=config['loss'], dt=config['dt'], decimation_factor=config['decimation_factor'],
-                      cwt=config['cwt'], **config['kwargs'])
-        model.build_model(depth=config['depth'], filter_root=config['filter_root'], kernel_size=config['kernel_size'],
-                          strides=config['strides'], fully_connected=config['fully_connected'])
-        model.model.load_weights(model_filename)
-        input_shape = model.shape
+        model_dae = Model(ts_length=config['ts_length'], use_bias=config['use_bias'],
+                          activation=config['activation'], drop_rate=config['drop_rate'],
+                          channels=config['channels'], optimizer=optimizer,
+                          loss=config['loss'], dt=config['dt'], decimation_factor=config['decimation_factor'],
+                          cwt=config['cwt'], **config['kwargs'])
+        model_dae.build_model(depth=config['depth'], filter_root=config['filter_root'],
+                              kernel_size=config['kernel_size'], strides=config['strides'],
+                              fully_connected=config['fully_connected'])
+        model_dae.model.load_weights(model_filename)
+        input_shape = model_dae.shape
     else:
         # Read fully trained model
-        model = load_model(model_filename)
-        input_shape = (model.input_shape[1], model.input_shape[2])
+        model_dae = load_model(model_filename)
+        input_shape = (model_dae.input_shape[1], model_dae.input_shape[2])
 
     # Allocate empty arrays for data
     X = np.empty(shape=(len(data_list), *input_shape, config['channels']), dtype="float")
@@ -71,21 +72,11 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
     for i, array in enumerate(data_list):
         signal_tmp = array[:config['ts_length']]
 
-        # Remove mean
-        signal_tmp = signal_tmp - np.mean(signal_tmp)
+        signal, dt = preprocessing(data=signal_tmp, dt=config['dt'],
+                                   decimation_factor=config['decimation_factor'])
+                                   # taper=dict(max_percentage=0.02, type="cosine"),
+                                   # filter=dict(type="highpass", freq=0.5))
 
-        # Apply highpass filter and taper data
-        tr_s = obspy.Trace(data=signal_tmp, header=dict(delta=config['dt']))
-        tr_s.filter("highpass", freq=0.5)
-        tr_s.taper(0.02, type="cosine")
-
-        # Decimate data
-        if config['decimation_factor'] is not None:
-            tr_s.decimate(factor=config['decimation_factor'])
-            dt = tr_s.stats.delta
-
-        # Normalize Signal
-        signal = tr_s.data
         norm = np.max(np.abs(signal))
         signal = signal / norm
         norm_factors.append(norm)
@@ -100,9 +91,7 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
 
         # Allocate empty array for recovered signals
         if i == 0:
-            recovered = np.empty(shape=(len(data_list), tr_s.stats.npts, 2), dtype="float")
-            # dt = tr_s.stats.delta
-            # df = freqs[1] - freqs[0]
+            recovered = np.empty(shape=(len(data_list), len(signal), 2), dtype="float")
 
         # Add transform to transform_list
         transform_list[i, :, :, 0] = cns
@@ -122,9 +111,9 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
 
     # Denoise data by prediction with model
     if ckpt_model is True:
-        X_pred = model.model.predict(X)
+        X_pred = model_dae.model.predict(X)
     else:
-        X_pred = model.predict(X)
+        X_pred = model_dae.predict(X)
 
     # Loop over each element in predicted data and estimate denoised data
     for i in range(X_pred.shape[0]):
@@ -269,16 +258,47 @@ def predict_test_dataset(model_filename, config_filename, signal_list, noise_lis
         plt.show()
 
 
+def test_model(model_filename, config_filename, **kwargs):
+    import matplotlib.pyplot as plt
+    # Create random time series
+    config = load_obj(config_filename)
+    data = np.random.normal(size=config['ts_length'])
+
+    # Predict noise and signal
+    recovered, _, _ = predict(model_filename=model_filename, config_filename=config_filename, data_list=[data],
+                              **kwargs)
+
+    # Apply preprocessing on data
+    tr = obspy.Trace(data=data, header=dict(delta=config['dt']))
+    tr.filter("highpass", freq=0.5)
+    if config["decimation_factor"]:
+        tr.decimate(factor=config["decimation_factor"])
+
+    t_signal = np.arange(0, tr.stats.npts) * tr.stats.delta
+
+    # Plot recovered data and compate recovered noise and signal to true data
+    # If recovered noise + recovered signal do not match with true data, an error exists
+    plt.plot(t_signal, tr.data, color="k", label="True Data", alpha=0.6)
+    plt.plot(t_signal, recovered[0, :, 0] + recovered[0, :, 1], color="r", label="Recovered data", alpha=0.6)
+    plt.legend()
+    plt.show()
+
+
 
 
 if __name__ == "__main__":
     import glob
-    from model import Model
-    signal_list = glob.glob("/home/geophysik/dae_noise_data/signal/*")[:10]
-    noise_list = glob.glob("/home/geophysik/dae_noise_data/noise/*/*/*")[:10]
-    signal_test_list = glob.glob("/home/geophysik/cwt_denoiser_test_data/*")
+    import os
 
-    model = "/home/geophysik/Schreibtisch/cwt_denoiser/Models/2021-02-05_stft.h5"
-    config = "/home/geophysik/Schreibtisch/cwt_denoiser/config/2021-02-05_stft.config"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+    # from model import Model
+    # signal_list = glob.glob("/home/geophysik/dae_noise_data/signal/*")[:10]
+    # noise_list = glob.glob("/home/geophysik/dae_noise_data/noise/*/*/*")[:10]
+    # signal_test_list = glob.glob("/home/geophysik/cwt_denoiser_test_data/*")
+    #
+    model = "/home/janis/CODE/cwt_denoiser/Models/test_cwt.h5"
+    config = "/home/janis/CODE/cwt_denoiser/config/test_cwt.config"
+    #
+    # predict_test_dataset(model, config, signal_list, noise_list, ckpt_model=False)
 
-    predict_test_dataset(model, config, signal_list, noise_list, ckpt_model=False)
+    test_model(model_filename=model, config_filename=config)

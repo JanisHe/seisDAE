@@ -13,7 +13,6 @@ import matplotlib.pyplot as plt
 
 from datetime import datetime
 from scipy.signal import stft, istft
-import tensorflow as tf
 from tensorflow.keras.utils import Sequence
 from tensorflow.keras.models import Model as TFmodel
 from tensorflow.keras.layers import Input, Conv2D, BatchNormalization, ReLU, Dropout, Conv2DTranspose, Cropping2D, \
@@ -45,6 +44,36 @@ def cwt_wrapper(x, dt=1.0, yshape=150, **kwargs):
     return coeffs, scales, dj, freqs_x
 
 
+def preprocessing(data, dt=1.0, **kwargs):
+    # Remove mean
+    data = data - np.mean(data)
+
+    # Write data to obspy trace
+    trace = obspy.Trace(data=data, header=dict(delta=dt))
+
+    # Decimate data
+    try:
+        if kwargs['decimation_factor']:
+            trace.decimate(kwargs['decimation_factor'])
+            dt = trace.stats.delta
+    except KeyError:
+        pass
+
+    # Apply filter
+    try:
+        trace.filter(**kwargs['filter'])
+    except KeyError:
+        pass
+
+    # Taper data
+    try:
+        trace.taper(**kwargs['taper'])
+    except KeyError:
+        pass
+
+    return trace.data, dt
+
+
 def cropping_layer(needed_shape, is_shape):
     diff1 = is_shape[0] - needed_shape[0]
     if diff1 % 2 == 0 and diff1 > 0:
@@ -69,9 +98,17 @@ def cropping_layer(needed_shape, is_shape):
 class Model:
 
     def __init__(self, ts_length=6001, dt=1.0, validation_split=0.15, optimizer="adam",
-                 loss='mean_absolute_error', activation="sigmoid", drop_rate=0.001,
-                 use_bias=False, data_augmentation=True, shuffle=True, channels=2, decimation_factor=2, cwt=False,
+                 loss='mean_absolute_error', activation=None, drop_rate=0.001,
+                 use_bias=False, data_augmentation=True, shuffle=True, channels=2, decimation_factor=2, cwt=True,
                  callbacks=None, **kwargs):
+
+        # Check input parameters
+        if isinstance(decimation_factor, int) is True:
+            if decimation_factor <= 1:
+                decimation_factor = None
+        elif isinstance(decimation_factor, int) is False and decimation_factor is not None:
+            msg = "Decimation factor must either be None or of type integer!"
+            raise TypeError(msg)
 
         self.dt = dt
         self.dt_orig = dt
@@ -138,89 +175,92 @@ class Model:
             strides = (1, 1)
 
         # Run Model on mutiple GPUs
-        mirrored_strategy = tf.distribute.MirroredStrategy()
-        with mirrored_strategy.scope():
-            # Define Input layer
-            input_layer = Input((self.shape[0], self.shape[1], self.channels))
+        # Unccomment ntex two lines and tab everything including model.compile
+        # mirrored_strategy = tf.distribute.MirroredStrategy()
+        # with mirrored_strategy.scope():
 
-            # Empty dict to save shape for each layer
-            layer_shapes = dict()
-            convs = []
+        # Define Input layer
+        input_layer = Input((self.shape[0], self.shape[1], self.channels))
 
-            # Encoder
-            # First Layer
-            h = Conv2D(filter_root, kernel_size, activation=self.activation, padding='same',
-                       use_bias=self.use_bias, **kwargs)(input_layer)
+        # Empty dict to save shape for each layer
+        layer_shapes = dict()
+        convs = []
+
+        # Encoder
+        # First Layer
+        h = Conv2D(filter_root, kernel_size, activation=self.activation, padding='same',
+                   use_bias=self.use_bias, **kwargs)(input_layer)
+        h = BatchNormalization()(h)
+        h = ReLU()(h)
+        h = Dropout(rate=self.drop_rate)(h)
+
+        # More Layers
+        for i in range(depth):
+            h = Conv2D(int(2 ** i * filter_root), kernel_size, activation=self.activation, padding='same',
+                       use_bias=self.use_bias, **kwargs)(h)
             h = BatchNormalization()(h)
             h = ReLU()(h)
             h = Dropout(rate=self.drop_rate)(h)
 
-            # More Layers
-            for i in range(depth):
-                h = Conv2D(int(2**i * filter_root), kernel_size, activation=self.activation, padding='same',
-                           use_bias=self.use_bias, **kwargs)(h)
-                h = BatchNormalization()(h)
-                h = ReLU()(h)
-                h = Dropout(rate=self.drop_rate)(h)
+            layer_shapes.update({i: (h.shape[1], h.shape[2])})
+            convs.append(h)
 
-                layer_shapes.update({i: (h.shape[1], h.shape[2])})
-                convs.append(h)
-
-                if i < depth - 1:
-                    h = Conv2D(int(2**i * filter_root), kernel_size, activation=self.activation, padding='same',
-                               use_bias=self.use_bias, strides=strides, **kwargs)(h)
-
-                    if max_pooling is True:
-                        h = MaxPooling2D(pool_size=pool_size, padding="same")(h)
-
-                    h = BatchNormalization()(h)
-                    h = ReLU()(h)
-                    h = Dropout(rate=self.drop_rate)(h)
-
-            # Fully Connected Layer
-            if fully_connected is True:
-                conv_shape = tuple(h.shape[1:])
-                h = Flatten()(h)
-                flatten_shape = h.shape[1]
-                h = Dense(units=flatten_shape, activation=self.activation, use_bias=self.use_bias)(h)
-                h = Dense(units=int(flatten_shape / 10), activation=self.activation, use_bias=self.use_bias)(h)
-                h = Dense(units=flatten_shape, activation=self.activation, use_bias=self.use_bias)(h)
-                h = Reshape(target_shape=conv_shape)(h)
-
-            # Decoder
-            for i in range(depth - 2, -1, -1):
-                needed_shape = layer_shapes[i]
+            if i < depth - 1:
+                h = Conv2D(int(2 ** i * filter_root), kernel_size, activation=self.activation, padding='same',
+                           use_bias=self.use_bias, strides=strides, **kwargs)(h)
 
                 if max_pooling is True:
-                    h = Conv2D(int(2 ** i * filter_root), kernel_size, activation=self.activation, padding='same',
-                               use_bias=self.use_bias, strides=strides, **kwargs)(h)
-                    h = UpSampling2D(size=pool_size)(h)
-                elif max_pooling is False:
-                    h = Conv2DTranspose(int(2 ** i * filter_root), kernel_size, activation=self.activation, padding='same',
-                                        use_bias=self.use_bias, strides=strides, **kwargs)(h)
+                    h = MaxPooling2D(pool_size=pool_size, padding="same")(h)
+
                 h = BatchNormalization()(h)
                 h = ReLU()(h)
                 h = Dropout(rate=self.drop_rate)(h)
 
-                # Crop network and add skip connections
-                crop = cropping_layer(needed_shape, is_shape=(h.shape[1], h.shape[2]))
-                h = Cropping2D(cropping=(crop[0], crop[1]))(h)
-                h = Add()([convs[i], h])
+        # Fully Connected Layer
+        if fully_connected is True:
+            conv_shape = tuple(h.shape[1:])
+            h = Flatten()(h)
+            flatten_shape = h.shape[1]
+            h = Dense(units=flatten_shape, activation=self.activation, use_bias=self.use_bias)(h)
+            h = Dense(units=int(flatten_shape / 10), activation=self.activation, use_bias=self.use_bias)(h)
+            h = Dense(units=flatten_shape, activation=self.activation, use_bias=self.use_bias)(h)
+            h = Reshape(target_shape=conv_shape)(h)
 
+        # Decoder
+        for i in range(depth - 2, -1, -1):
+            needed_shape = layer_shapes[i]
+
+            if max_pooling is True:
                 h = Conv2D(int(2 ** i * filter_root), kernel_size, activation=self.activation, padding='same',
-                           use_bias=self.use_bias, **kwargs)(h)
-                h = BatchNormalization()(h)
-                h = ReLU()(h)
-                h = Dropout(rate=self.drop_rate)(h)
+                           use_bias=self.use_bias, strides=strides, **kwargs)(h)
+                h = UpSampling2D(size=pool_size)(h)
+            elif max_pooling is False:
+                h = Conv2DTranspose(int(2 ** i * filter_root), kernel_size, activation=self.activation,
+                                    padding='same',
+                                    use_bias=self.use_bias, strides=strides, **kwargs)(h)
+            h = BatchNormalization()(h)
+            h = ReLU()(h)
+            h = Dropout(rate=self.drop_rate)(h)
 
-                # Output layer
-                h = Conv2D(filters=self.channels, kernel_size=(1, 1), activation=self.activation, use_bias=self.use_bias,
-                           padding="same", **kwargs)(h)
-                h = Softmax()(h)
+            # Crop network and add skip connections
+            crop = cropping_layer(needed_shape, is_shape=(h.shape[1], h.shape[2]))
+            h = Cropping2D(cropping=(crop[0], crop[1]))(h)
+            h = Add()([convs[i], h])
 
-                # Build model and compile Model
-                self.model = TFmodel(input_layer, h)
-                self.model.compile(optimizer=self.optimizer, loss=self.loss, metrics=['accuracy'])
+            h = Conv2D(int(2 ** i * filter_root), kernel_size, activation=self.activation, padding='same',
+                       use_bias=self.use_bias, **kwargs)(h)
+            h = BatchNormalization()(h)
+            h = ReLU()(h)
+            h = Dropout(rate=self.drop_rate)(h)
+
+        # Output layer
+        h = Conv2D(filters=self.channels, kernel_size=(1, 1), activation=self.activation, use_bias=self.use_bias,
+                   padding="same", **kwargs)(h)
+        h = Softmax()(h)
+
+        # Build model and compile Model
+        self.model = TFmodel(input_layer, h)
+        self.model.compile(optimizer=self.optimizer, loss=self.loss, metrics=['accuracy'])
 
 
     def summarize(self):
@@ -262,12 +302,8 @@ class Model:
         self.save_config(pathname=pathname_config, filename=filename)
         # Save fully trained model
         if filename:
-            if self.cwt is False:
-                self.model.save("{}/{}_stft.h5".format(pathname_model, filename), overwrite=True)
-                print("Saved Model as {}/{}_stft.h5".format(pathname_model, filename))
-            elif self.cwt is True:
-                self.model.save("{}/{}_cwt.h5".format(pathname_model, filename), overwrite=True)
-                print("Saved Model as {}/{}_cwt.h5".format(pathname_model, filename))
+            self.model.save("{}/{}.h5".format(pathname_model, filename), overwrite=True)
+            print("Saved Model as {}/{}.h5".format(pathname_model, filename))
         else:
             if self.cwt is False:
                 self.model.save("{}/{}_stft.h5".format(pathname_model, self.now_str), overwrite=True)
@@ -282,7 +318,7 @@ class Model:
                               workers=8, use_multiprocessing=True, max_queue_size=10):
 
         # Save config file in config directory as tmp.config
-        filename_tmp_config = "{}_tmp".format(self.now_str)
+        filename_tmp_config = "{}_{}_tmp".format(self.now_str, "stft" if self.cwt is False else "cwt")
         self.save_config(pathname="./config", filename=filename_tmp_config)
 
         # Split value to split data into training and validation datasets
@@ -296,13 +332,13 @@ class Model:
         generator_train = DataGenerator(signal_list=signal_file[:split], noise_list=noise_file,
                                         batch_size=batch_size, channels=self.channels,
                                         shape=self.shape, data_augmentation=self.data_augmentation,
-                                        cwt=self.cwt, dt=self.dt, ts_length=self.ts_length,
+                                        cwt=self.cwt, dt=self.dt_orig, ts_length=self.ts_length,
                                         decimation_factor=self.decimation_factor,
                                         **self.kwargs)
         generator_validate = DataGenerator(signal_list=signal_file[split:], noise_list=noise_file,
                                            batch_size=batch_size, channels=self.channels,
                                            shape=self.shape, data_augmentation=self.data_augmentation,
-                                           cwt=self.cwt, dt=self.dt, ts_length=self.ts_length,
+                                           cwt=self.cwt, dt=self.dt_orig, ts_length=self.ts_length,
                                            decimation_factor=self.decimation_factor,
                                            **self.kwargs)
 
@@ -397,18 +433,18 @@ class DataGenerator(Sequence):
             signal = np.load(signal_filename)
             noise = np.load(noise_filename)
 
-            # Read signal and noise from npz files
-            p_samp = signal["itp"]   # Sample of P-arrival
-            s_samp = signal["its"]   # Sample of S-arrival
-            signal = signal["data"]
-            noise = noise["data"][:self.ts_length]
-
             # XXX Leads to Runtime Warnings (Division by zero) in estimation of mapping functions
             # XXX RuntimeWarning: divide by zero encountered in true_divide
             # DATA AUGMENTATION
             # Move signal randomly, hence P-arrival varies its place
             # Add randomly zeros at beginning
             if self.data_augmentation is True:
+                # Read signal and noise from npz files
+                p_samp = signal["itp"]  # Sample of P-arrival
+                s_samp = signal["its"]  # Sample of S-arrival
+                signal = signal["data"]
+                noise = noise["data"][:self.ts_length]
+
                 # epsilon = 0  # Avoiding zeros in added arrays
                 # shift1 = np.random.uniform(low=-1, high=1, size=int(self.ts_length - s_samp)) * epsilon
                 shift1 = np.zeros(shape=int(self.ts_length - s_samp))
@@ -421,27 +457,16 @@ class DataGenerator(Sequence):
             else:
                 signal = signal[:self.ts_length]
 
-            # Remove mean
-            noise = noise - np.mean(noise)
-            signal = signal - np.mean(signal)
-
-            # Apply highpass filter and taper
-            tr_n = obspy.Trace(data=noise, header=dict(delta=self.dt))
-            tr_s = obspy.Trace(data=signal, header=dict(delta=self.dt))
-            tr_n.filter("highpass", freq=0.5)
-            tr_s.filter("highpass", freq=0.5)
-            tr_s.taper(max_percentage=0.02, type="cosine")
-            tr_n.taper(max_percentage=0.02, type="cosine")
-
-            # Decimate by factor decimation_factor
-            if self.decimation_factor:
-                tr_n.decimate(factor=self.decimation_factor)
-                tr_s.decimate(factor=self.decimation_factor)
+            # Preprocess data and get sampling rate for time-frequency representation
+            noise, _ = preprocessing(noise, dt=self.dt, decimation_factor=self.decimation_factor,
+                                     filter=dict(type="highpass", freq=0.5))
+                                     # taper=dict(max_percentage=0.02, type="cosine"))
+            signal, self.dt_tf = preprocessing(signal, dt=self.dt, decimation_factor=self.decimation_factor,
+                                               filter=dict(type="highpass", freq=0.5))
+                                               # taper=dict(max_percentage=0.02, type="cosine"))
 
             # Normalize Noise and signal by each max. absolute value
             # Since noise and signal do not have same amplitude range, each trace is normalized by itself
-            noise = tr_n.data
-            signal = tr_s.data
             noise = noise / np.max(np.abs(noise))
             signal = signal / np.max(np.abs(signal))
 
@@ -460,13 +485,13 @@ class DataGenerator(Sequence):
 
             # STFT or CWT of noisy signal and signal
             if self.cwt is False:
-                _, _, cns = stft(noisy_signal, fs=1 / self.dt, **self.kwargs)
-                _, _, cs = stft(signal, fs=1 / self.dt, **self.kwargs)
-                _, _, cn = stft(noise, fs=1 / self.dt, **self.kwargs)
+                _, _, cns = stft(noisy_signal, fs=1 / self.dt_tf, **self.kwargs)
+                _, _, cs = stft(signal, fs=1 / self.dt_tf, **self.kwargs)
+                _, _, cn = stft(noise, fs=1 / self.dt_tf, **self.kwargs)
             elif self.cwt is True:
-                cns, _, _, _ = cwt_wrapper(noisy_signal, dt=self.dt, **self.kwargs)
-                cs, _, _, _ = cwt_wrapper(signal, dt=self.dt, **self.kwargs)
-                cn, _, _, _ = cwt_wrapper(noise, dt=self.dt, **self.kwargs)
+                cns, _, _, _ = cwt_wrapper(noisy_signal, dt=self.dt_tf, **self.kwargs)
+                cs, _, _, _ = cwt_wrapper(signal, dt=self.dt_tf, **self.kwargs)
+                cn, _, _, _ = cwt_wrapper(noise, dt=self.dt_tf, **self.kwargs)
 
             np.seterr(divide='ignore', invalid='ignore')  # Ignoring Runtime Warnings for division by zero
             # Write data to empty np arrays
