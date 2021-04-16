@@ -3,7 +3,6 @@ import os
 import shutil
 import glob
 import warnings
-import tensorflow as tf
 
 from model import Model
 from utils import readtxt
@@ -24,11 +23,15 @@ else:
 
     # Set up everthing to start training of model
     # Setup for GPU
+    # XXX Test whether selected GPU is used, otherwise use different GPU
+    #if tf.test.is_gpu_available(cuda_only=False, min_cuda_compute_capability=None) is True:
     try:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(parameters['num_gpu'])
+        print("Run job on GPU {}".format(parameters['num_gpu']))
     except KeyError:
         warnings.warn("Run on GPU 0 because 'num_gpu' is not defined!")
         os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+        print("Run job on GPU 0")
     os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 
     # Setup for signal and noise files
@@ -40,6 +43,7 @@ else:
         pass
 
     # Create callbacks
+    import tensorflow as tf   # Importing tensorflow earlier leads to running script on more then one GPU
     callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=parameters['patience'], verbose=1),
                  tf.keras.callbacks.ModelCheckpoint(filepath="./checkpoints/{}/latest_checkpoint.ckpt".
                                                     format(parameters['filename']),

@@ -103,7 +103,8 @@ class Model:
                  callbacks=None, **kwargs):
 
         # Check input parameters
-        if isinstance(decimation_factor, int) is True:
+        if isinstance(decimation_factor, int) is True or isinstance(decimation_factor, float) is True:
+            decimation_factor = int(decimation_factor)
             if decimation_factor <= 1:
                 decimation_factor = None
         elif isinstance(decimation_factor, int) is False and decimation_factor is not None:
