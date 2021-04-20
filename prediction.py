@@ -64,6 +64,7 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
     dj = []
     norm_factors = []
     dt = config['dt']
+    mean_values = []
 
     if config['channels'] == 1:
         phases = []
@@ -80,6 +81,7 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
         norm = np.max(np.abs(signal))
         signal = signal / norm
         norm_factors.append(norm)
+        mean_values.append(np.mean(signal))
 
         # Transform data either using STFT of CWT
         if config['cwt'] is False:
@@ -135,6 +137,10 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
         # Multiply denoised trace by normalization factor to get true data without normalization
         rec_signal = np.real(rec_signal * norm_factors[i])
         rec_noise = np.real(rec_noise * norm_factors[i])
+
+        # Add mean back on signal and noise
+        rec_signal += mean_values[i]
+        rec_noise += mean_values[i]
 
         # Append denoised traces to list
         recovered[i, :, 0] = rec_signal
