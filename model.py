@@ -9,6 +9,7 @@ import random
 
 import obspy
 import numpy as np
+import tensorflow as tf
 import matplotlib.pyplot as plt
 
 from datetime import datetime
@@ -298,10 +299,16 @@ class Model:
         """
         Save model as .h5 file and write a .txt file with all important settings.
         """
-        # XXX Save model from last checkpoint to prevent overfitting!
         # Save config file
         self.save_config(pathname=pathname_config, filename=filename)
         # Save fully trained model
+        #  If checkpoints are available, the model is saved from the latest checkpoint to prevent overfitting
+        for callback_index, callback_val in enumerate(self.callbacks):
+            if type(callback_val) == tf.keras.callbacks.ModelCheckpoint:
+                self.model.load_weights(self.callbacks[callback_index].filepath)
+                print("Model is saved from latest checkpoints.")
+                break
+
         if filename:
             self.model.save("{}/{}.h5".format(pathname_model, filename), overwrite=True)
             print("Saved Model as {}/{}.h5".format(pathname_model, filename))
