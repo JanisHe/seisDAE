@@ -78,10 +78,10 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
                                    # taper=dict(max_percentage=0.02, type="cosine"),
                                    # filter=dict(type="highpass", freq=0.5))
 
+        mean_values.append(np.mean(signal))
         norm = np.max(np.abs(signal))
         signal = signal / norm
         norm_factors.append(norm)
-        mean_values.append(np.mean(signal))
 
         # Transform data either using STFT of CWT
         if config['cwt'] is False:
