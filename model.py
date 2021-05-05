@@ -55,7 +55,7 @@ def preprocessing(data, dt=1.0, **kwargs):
     # Decimate data
     try:
         if kwargs['decimation_factor']:
-            trace.decimate(kwargs['decimation_factor'])
+            trace.decimate(kwargs['decimation_factor'], no_filter=True)
             dt = trace.stats.delta
     except KeyError:
         pass
