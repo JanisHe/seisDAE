@@ -269,6 +269,10 @@ class Model:
         self.model.summary()
 
     def save_config(self, pathname="./config", filename=None):
+        # Check and create directory
+        if not os.path.exists(pathname):
+            os.makedirs(pathname)
+
         if filename:
             settings_filename = "{}/{}.config".format(pathname, filename)
         else:
@@ -299,6 +303,13 @@ class Model:
         """
         Save model as .h5 file and write a .txt file with all important settings.
         """
+        # Check whether pathname exists, otherwise create new directories
+        if not os.path.exists(pathname_model):
+            os.makedirs(pathname_model)
+
+        if not os.path.exists(pathname_config):
+            os.makedirs(pathname_config)
+
         # Save config file
         self.save_config(pathname=pathname_config, filename=filename)
         # Save fully trained model
@@ -362,6 +373,10 @@ class Model:
         """
         Plot loss vs epochs of training and validation
         """
+        # Create directory
+        if not os.path.exists(pathname):
+            os.makedirs(pathname)
+
         # Create name for figure
         if filename:
             name = filename
@@ -455,7 +470,10 @@ class DataGenerator(Sequence):
 
                 # epsilon = 0  # Avoiding zeros in added arrays
                 # shift1 = np.random.uniform(low=-1, high=1, size=int(self.ts_length - s_samp)) * epsilon
-                shift1 = np.zeros(shape=int(self.ts_length - s_samp))
+                if int(self.ts_length - s_samp) < 0:
+                    shift1 = np.zeros(0)
+                else:
+                    shift1 = np.zeros(shape=int(self.ts_length - s_samp))
                 signal = np.concatenate((shift1, signal))
                 # Cut signal to length of ts_length and arrival of P-phase is included
                 p_samp += len(shift1)
