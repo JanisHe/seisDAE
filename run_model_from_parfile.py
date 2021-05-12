@@ -16,6 +16,8 @@ elif len(sys.argv) > 1 and os.path.isfile(sys.argv[1]) is False:
 else:
     # Read parfile
     parfile = sys.argv[1]
+
+    print("Reading data input arguments from {}".format(parfile))
     parameters = readtxt(parfile)
 
     # Make copy of parfile and rename it by filename given in parameters
