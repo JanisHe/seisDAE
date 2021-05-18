@@ -2,15 +2,15 @@
 # Start by typing 'bash train.sh model_parfile'
 #############################################################################################################
 # Pathnames of signal and noise files (* for placeholder are valid)
-signal_pathname = /rscratch/minos15/janis/dae_noise_data/signal/*
-noise_pathname = /rscratch/minos15/janis/dae_noise_data/noise/BAVN/*/*
-num_signals = 10000                     # Number of signals to use. If not specified it takes all signals
-filename = cwt_test1                    # Filename for saved checkpoints, model and history plots
+signal_pathname = ./example_data/signal/*
+noise_pathname = ./example_data/noise/*
+num_signals = 1000                      # Number of signals to use. If not specified it takes all signals
+filename = my_model                     # Filename for saved checkpoints, model and history plots
 #############################################################################################################
 # Preprocessing of time series to reduce and size and increase time for training
-decimation_factor = None                # Decimate sampling rate of time series by given factor. Default is None
+decimation_factor = None                # Decimate sampling rate of time series by given factor (integer). Default is None
 ts_length = 6001                        # Length of time series in samples
-dt = 0.01                               # Sampling rate of time series in s
+dt = 0.01                               # Sampling rate of input time series in s
 #############################################################################################################
 # Choose Time-Frequency representation (TF) and its dimensions
 cwt = False                             # If True, CWT is used as TF, if False STFT is used
@@ -19,14 +19,14 @@ nfft = 198                              # nfft for STFT (cwt=False)
 nperseg = 99                            # numbers per segement for STFT (cwt=False)
 #############################################################################################################
 # Parameters to set up Convolution Neural Network (CNN)
-depth = 8                               # Depth of CNN. Default is 6
+depth = 6                               # Depth of CNN. Default is 6
 filter_root = 8                         # Size of first filter. Default is 8. Filter size increases by 2**i * filter_root for i [0, depth-1]
-strides = 2, 3                          # Size of strides for Conv2D-Layer. Default is 2, 2
+strides = 2, 2                          # Size of strides for Conv2D-Layer. Default is 2, 2
 drop_rate = 0.1                         # Drop rate for CNN Layers. Default is 0.1
 validation_split = 0.2                  # Validation split of signals. [0-1] -> recommended: 0.2
 loss_function = binary_crossentropy     # loss function
 epochs = 200                            # Number of epochs for training
-batch_size = 16                         # Batch size
+batch_size = 32                         # Batch size
 patience = 30                           # Patience for early stopping callback
 verbose = 2                             # Verbosity for training [1-3]
 #############################################################################################################
