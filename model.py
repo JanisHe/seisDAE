@@ -463,23 +463,33 @@ class DataGenerator(Sequence):
             # Add randomly zeros at beginning
             if self.data_augmentation is True:
                 # Read signal and noise from npz files
-                p_samp = signal["itp"]  # Sample of P-arrival
-                s_samp = signal["its"]  # Sample of S-arrival
+                try:
+                    p_samp = signal["itp"]  # Sample of P-arrival
+                    s_samp = signal["its"]  # Sample of S-arrival
+                except KeyError:
+                    p_samp = None
+                    s_samp = None
+
+                # Read data arrays from signal and noise
                 signal = signal["data"]
                 noise = noise["data"][:self.ts_length]
 
                 # epsilon = 0  # Avoiding zeros in added arrays
                 # shift1 = np.random.uniform(low=-1, high=1, size=int(self.ts_length - s_samp)) * epsilon
-                if int(self.ts_length - s_samp) < 0:
-                    shift1 = np.zeros(0)
+                if p_samp and s_samp:
+                    if int(self.ts_length - s_samp) < 0:
+                        shift1 = np.zeros(0)
+                    else:
+                        shift1 = np.zeros(shape=int(self.ts_length - s_samp))
+                    signal = np.concatenate((shift1, signal))
+                    # Cut signal to length of ts_length and arrival of P-phase is included
+                    p_samp += len(shift1)
+                    s_samp += len(shift1)
+                    start = random.randint(0, p_samp)
+                    signal = signal[start:start + self.ts_length]
                 else:
-                    shift1 = np.zeros(shape=int(self.ts_length - s_samp))
-                signal = np.concatenate((shift1, signal))
-                # Cut signal to length of ts_length and arrival of P-phase is included
-                p_samp += len(shift1)
-                s_samp += len(shift1)
-                start = random.randint(0, p_samp)
-                signal = signal[start:start + self.ts_length]
+                    start = random.randint(0, len(signal) - self.ts_length - 1)
+                    signal = signal[start:int(start + self.ts_length)]
             else:
                 signal = signal[:self.ts_length]
 
