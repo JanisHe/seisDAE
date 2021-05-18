@@ -1,4 +1,5 @@
 import pickle
+import numpy as np
 
 def save_obj(dictionary, filename):
     with open(filename, 'wb') as f:
@@ -97,6 +98,26 @@ def readtxt(fname):
     fopen.close()
 
     return parameters
+
+def rms(x):
+    """
+    Root mean square of array x
+    :param x:
+    :return:
+    """
+    # Remove mean
+    x = x - np.mean(x)
+    return np.sqrt(np.sum(x ** 2) / x.shape[0])
+
+
+def signal_to_noise_ratio(signal, noise):
+    """
+    SNR in dB
+    :param signal:
+    :param noise:
+    :return:
+    """
+    return 10 * np.log10(rms(signal) / rms(noise))
 
 
 if __name__ == "__main__":
