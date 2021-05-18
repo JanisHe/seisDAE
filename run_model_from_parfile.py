@@ -55,6 +55,10 @@ else:
                                                     period=1, verbose=1)
                  ]
 
+    # Create directory for checkpoints
+    if not os.path.exists("./checkpoints"):
+        os.makedirs("./checkpoints")
+
     # Create optimizer  XXX Add more optimizers and set options
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-7, amsgrad=False,
                                          name='Adam')
