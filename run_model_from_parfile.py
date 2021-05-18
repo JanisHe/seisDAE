@@ -21,6 +21,8 @@ else:
     parameters = readtxt(parfile)
 
     # Make copy of parfile and rename it by filename given in parameters
+    if not os.path.exists("./model_parfiles"):
+        os.makedirs("./model_parfiles")
     shutil.copyfile(src=parfile, dst="./model_parfiles/{}.parfile".format(parameters['filename']))
 
     # Set up everthing to start training of model
