@@ -29,3 +29,8 @@ The signal dataset are signals with high SNR from STEAD (Mousavi et al., 2020).
 #### Denoise data
 Run the function `predict` from file `prediction.py` with your created model and
 config file. The parameter data_list is a list with numpy arrays for denoising.
+
+#### Denoise obspy Trace
+Use the function `denoise_trace`in `denoise_day.py` and use the original trace.
+your trained model and the conifg-file as input arguments. The denoising may take
+some time and returns two traces for the recovered signal and noise.
