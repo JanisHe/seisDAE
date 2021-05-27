@@ -80,6 +80,8 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
 
         mean_values.append(np.mean(signal))
         norm = np.max(np.abs(signal))
+        if norm == 0:
+            norm = 1
         signal = signal / norm
         norm_factors.append(norm)
 

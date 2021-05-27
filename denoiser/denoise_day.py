@@ -27,9 +27,10 @@ def denoising_trace(trace, model_filename, config_filename, overlap=0.5, chunksi
         end = start + config["ts_length"]
 
     if end + 1 > trace.stats.npts:
+        start = trace.stats.npts - config['ts_length']
         starttime_list.append(trace.stats.starttime + start * trace.stats.delta)
-        data = trace.data[start:]
-        data_list.append(np.concatenate((data, np.zeros(config["ts_length"] - len(data)))))
+        data_list.append(trace.data[start:])
+        #data_list.append(np.concatenate((data, np.zeros(config["ts_length"] - len(data)))))
 
     # Denoise data by prediction
     if chunksize is not None and chunksize >= 1:
