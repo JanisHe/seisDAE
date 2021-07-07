@@ -11,9 +11,13 @@ def denoising_trace(trace, model_filename, config_filename, overlap=0.5, chunksi
     # Load config file
     config = load_obj(config_filename)
 
-    if trace.stats.delta != config["dt"]:
-        msg = "Sampling rates of trace {} and denosing model are not equal".format(str(trace))
-        raise ValueError(msg)
+    # if trace.stats.delta != config["dt"]:
+    #     msg = "Sampling rates of trace {} and denosing model are not equal".format(str(trace))
+    #     raise ValueError(msg)
+
+    # Resample trace if sampling rate in config file and sampling rate of trace are not equal
+    if trace.stats.delta != config['dt']:
+        trace.resample(sampling_rate=1 / config['dt'])
 
     # Loop over each window
     data_list = []
