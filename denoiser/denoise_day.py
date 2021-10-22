@@ -1,12 +1,26 @@
+import os
 import numpy as np
 import obspy
 import copy
+from tqdm import tqdm
 
 from prediction import predict
 from utils import load_obj
 
 
 def denoising_trace(trace, model_filename, config_filename, overlap=0.5, chunksize=None, **kwargs):
+    """
+    Denoising of an obspy Trace object using a trained Denoising Autoencoder.
+
+    :param trace: obspy Trace
+    :param model_filename: filename of the trained denoising model
+    :param config_filename: filename of the config file for the denoising model
+    :param overlap: overlap between neighbouring elements in trace [0, 1]
+    :param chunksize: int, for denosing of large traces, a trace is splitted into parts of chunksize, otherwise
+                      the data might not fit into memory.
+
+    :returns: denoised trace, noisy trace
+    """
 
     # Load config file
     config = load_obj(config_filename)
@@ -39,7 +53,7 @@ def denoising_trace(trace, model_filename, config_filename, overlap=0.5, chunksi
     # Denoise data by prediction
     if chunksize is not None and chunksize >= 1:
         chunks = int(np.ceil(len(data_list) / chunksize))
-        for j in range(chunks):
+        for j in tqdm(range(chunks)):
             d = data_list[int(j*chunksize):int((j+1)*chunksize)]
             r, _, _ = predict(model_filename, config_filename, d, **kwargs)
             if j == 0:
@@ -98,3 +112,65 @@ def denoising_trace(trace, model_filename, config_filename, overlap=0.5, chunksi
     st_noise.trim(starttime=trace.stats.starttime, endtime=trace.stats.endtime)
 
     return st_denoised[0], st_noise[0]
+
+
+def denoise(date, model_filename, config_filename, channels, pathname_data, network, station_name,
+            station_code, pathname_denoised, station_code_denoised, data_type="", **kwargs):
+    """
+    """
+    # Read data for today
+    st_orig = obspy.Stream()
+    for channel in channels:
+        st_orig += obspy.read("{}/{:04d}/{}/{}/{}{}{}/*{:03d}".format(pathname_data, date.year, network, station_name,
+                                                                      station_code, channel, data_type,
+                                                                      date.julday))
+    # Merge original stream
+    if len(st_orig) > len(channels):
+        for trace in st_orig:
+            trace.data = trace.data - np.mean(trace.data)
+        st_orig.merge(fill_value=0)
+
+
+    # Sort streams in same order, thus later loops have the same indices for st_orig and st_denoised
+    st_orig.sort(keys=['channel'], reverse=True)
+
+    # Denoise original stream object
+    # Loop over each trace in original stream and apply denoising method
+    st_denoised = obspy.Stream()
+    reclen = []
+    for trace in st_orig:
+        denoised, _ = denoising_trace(trace=trace, model_filename=model_filename, config_filename=config_filename,
+                                      overlap=0.6, chunksize=600, **kwargs)
+        denoised.stats.channel = "{}{}".format(station_code_denoised, trace.stats.channel[2])
+        # Check for nan in denoised array an replace by zeros
+        np.nan_to_num(denoised.data, copy=False, nan=0.0)
+        # Change dtype for STEIM2 encoding
+        denoised.data = denoised.data.astype("int32")
+        reclen.append(trace.stats.mseed['record_length'])
+        st_denoised += denoised
+    st_denoised.merge(method=1, fill_value=0)
+    st_denoised.sort(keys=['channel'], reverse=True)
+
+    # Write each denoised trace into single mseed
+    for i, denoised in enumerate(st_denoised):
+        # Make directories if they do not exist
+        full_pathname = "{}{:04d}/{}/{}/{}{}".format(pathname_denoised, date.year, network, station_name,
+                                                     denoised.stats.channel, data_type)
+        if not os.path.exists(full_pathname):
+            os.makedirs(full_pathname)
+
+        filename = "{}{:04d}/{}/{}/{}{}/{}.{}.{}.{}.D.{:04d}.{:03d}".format(pathname_denoised, date.year, network,
+                                                                            station_name, denoised.stats.channel,
+                                                                            data_type,
+                                                                            denoised.stats.network,
+                                                                            denoised.stats.station,
+                                                                            denoised.stats.location,
+                                                                            denoised.stats.channel,
+                                                                            denoised.stats.starttime.year,
+                                                                            denoised.stats.starttime.julday
+                                                                            )
+
+        #denoised.trim(endtime=denoised.stats.endtime - 60)  # XXX
+        # Write full stream
+        denoised.write(filename=filename,
+                       format="MSEED", encoding="STEIM2", byteorder=">", reclen=reclen[i])

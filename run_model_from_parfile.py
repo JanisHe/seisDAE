@@ -134,7 +134,7 @@ else:
     # 2. Create Model
     m = Model(ts_length=int(parameters['ts_length']), use_bias=False, activation=None, drop_rate=drop_rate,
               channels=2, optimizer=optimizer, loss=loss, callbacks=callbacks, shuffle=True,
-              validation_split=parameters['validation_split'], dt=parameters['dt'],
+              dt=parameters['dt'],
               decimation_factor=decimation_factor, **dimension_kwargs)
 
     # 3. Build model
@@ -148,6 +148,7 @@ else:
     m.train_model_generator(signal_file=signal_files, noise_file=noise_files,
                             batch_size=int(parameters['batch_size']), epochs=int(parameters["epochs"]),
                             workers=workers, max_queue_size=max_queue_size,
+                            validation_split=parameters['validation_split'],
                             use_multiprocessing=use_multiprocessing, verbose=int(parameters['verbose']))
 
     # Save model and plot ist history

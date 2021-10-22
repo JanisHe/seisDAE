@@ -98,7 +98,7 @@ def cropping_layer(needed_shape, is_shape):
 
 class Model:
 
-    def __init__(self, ts_length=6001, dt=1.0, validation_split=0.15, optimizer="adam",
+    def __init__(self, ts_length=6001, dt=1.0, optimizer="adam",
                  loss='mean_absolute_error', activation=None, drop_rate=0.001,
                  use_bias=False, data_augmentation=True, shuffle=True, channels=2, decimation_factor=2, cwt=True,
                  callbacks=None, **kwargs):
@@ -115,7 +115,6 @@ class Model:
         self.dt = dt
         self.dt_orig = dt
         self.ts_length = ts_length
-        self.validation_split = validation_split
         self.optimizer = optimizer
         self.loss = loss
         self.activation = activation
@@ -364,7 +363,7 @@ class Model:
         self.history = self.model.fit(x=generator_train, epochs=epochs, workers=workers,
                                       use_multiprocessing=use_multiprocessing,
                                       verbose=verbose, validation_data=generator_validate,
-                                      callbacks=self.callbacks, max_queue_size=max_queue_size,)
+                                      callbacks=self.callbacks, max_queue_size=max_queue_size)
 
         # Remove temporary config file
         os.remove("./config/{}.config".format(filename_tmp_config))
@@ -451,10 +450,24 @@ class DataGenerator(Sequence):
         Y = np.empty(shape=(self.batch_size, *self.shape, self.channels), dtype="float16")   # Empty target data
 
         for i in range(self.batch_size):
-            signal_filename = "{}".format(self.signal_list[random.randint(0, len(self.signal_list) - 1)])
-            noise_filename = "{}".format(self.noise_list[random.randint(0, len(self.noise_list) - 1)])
-            signal = np.load(signal_filename)
-            noise = np.load(noise_filename)
+            # XXX Add warning when while loop is infinte and signal length is to short!
+            # Read signal
+            len_signal = 0
+            while len_signal < self.ts_length:
+                signal_filename = "{}".format(self.signal_list[random.randint(0, len(self.signal_list) - 1)])
+                signal = np.load(signal_filename)
+                len_signal = len(signal['data'])
+
+            # Read noise
+            # Proof noise for correct length and check whether array does not contain to many zeros
+            len_noise = 0
+            while len_noise < self.ts_length:
+                noise_filename = "{}".format(self.noise_list[random.randint(0, len(self.noise_list) - 1)])
+                noise = np.load(noise_filename)
+                len_noise = len(noise['data'])
+                # Check how many percent zeros contains the noise array
+                if np.count_nonzero(np.diff(noise['data'])) / len(noise['data']) < 0.95:
+                    len_noise = 0
 
             # XXX Leads to Runtime Warnings (Division by zero) in estimation of mapping functions
             # XXX RuntimeWarning: divide by zero encountered in true_divide
@@ -487,18 +500,22 @@ class DataGenerator(Sequence):
                     s_samp += len(shift1)
                     start = random.randint(0, p_samp)
                     signal = signal[start:start + self.ts_length]
-                else:
-                    start = random.randint(0, len(signal) - self.ts_length - 1)
-                    signal = signal[start:int(start + self.ts_length)]
+                else:                                                # XXX Add case just for p_samp
+                    if self.ts_length > len(signal):
+                        start = random.randint(0, len(signal) - self.ts_length - 1)
+                        signal = signal[start:int(start + self.ts_length)]
+                    else:
+                        signal = signal[:self.ts_length]
             else:
                 signal = signal[:self.ts_length]
 
             # Preprocess data and get sampling rate for time-frequency representation
-            noise, _ = preprocessing(noise, dt=self.dt, decimation_factor=self.decimation_factor,
-                                     filter=dict(type="highpass", freq=0.5))
+            # XXX Preprocessing as parameters
+            noise, _ = preprocessing(noise, dt=self.dt, decimation_factor=self.decimation_factor)
+                                     # filter=dict(type="bandpass", freqmin=0.03, freqmax=0.5))
                                      # taper=dict(max_percentage=0.02, type="cosine"))
-            signal, self.dt_tf = preprocessing(signal, dt=self.dt, decimation_factor=self.decimation_factor,
-                                               filter=dict(type="highpass", freq=0.5))
+            signal, self.dt_tf = preprocessing(signal, dt=self.dt, decimation_factor=self.decimation_factor)
+                                               # filter=dict(type="bandpass", freqmin=0.03, freqmax=0.5))
                                                # taper=dict(max_percentage=0.02, type="cosine"))
 
             # Normalize Noise and signal by each max. absolute value
