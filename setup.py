@@ -35,3 +35,8 @@ os.system("git clone https://github.com/regeirk/pycwt.git")
 # Run Setup file of PyCWT
 os.chdir('pycwt/')
 os.system('python setup.py install')
+# Create an empty file __init__.py in the pycwt directory, otherwise the package will not be recognised correctly.
+f_init = open("__init__.py", "w")
+f_init.close()
+
+# XXX Create test!
