@@ -191,6 +191,14 @@ def predict_test_dataset(model_filename, config_filename, signal_list, noise_lis
         noise = np.load("{}".format(noise_list[random.randint(0, len(noise_list) - 1)]))
         noise = noise["data"][:config['ts_length']]
 
+        # Normalize signal and noise
+        signal = signal / np.abs(np.max(signal))
+        noise = noise / np.abs(np.max(noise))
+
+        # Scale signal and noise
+        signal = signal * np.random.uniform(0, 2)
+        noise = noise * np.random.uniform(0, 2)
+
         # Add noise and signal
         ns = signal + noise
 
@@ -284,7 +292,7 @@ def test_model(model_filename, config_filename, **kwargs):
 
     t_signal = np.arange(0, tr.stats.npts) * tr.stats.delta
 
-    # Plot recovered data and compate recovered noise and signal to true data
+    # Plot recovered data and compute recovered noise and signal to true data
     # If recovered noise + recovered signal do not match with true data, an error exists
     plt.plot(t_signal, tr.data, color="k", label="True Data", alpha=0.6)
     plt.plot(t_signal, recovered[0, :, 0] + recovered[0, :, 1], color="r", label="Recovered data", alpha=0.6)
@@ -299,14 +307,10 @@ if __name__ == "__main__":
     import os
 
     os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-    # from model import Model
-    # signal_list = glob.glob("/home/geophysik/dae_noise_data/signal/*")[:10]
-    # noise_list = glob.glob("/home/geophysik/dae_noise_data/noise/*/*/*")[:10]
-    # signal_test_list = glob.glob("/home/geophysik/cwt_denoiser_test_data/*")
-    #
-    model = "/home/janis/CODE/cwt_denoiser/Models/test_cwt.h5"
-    config = "/home/janis/CODE/cwt_denoiser/config/test_cwt.config"
-    #
-    # predict_test_dataset(model, config, signal_list, noise_list, ckpt_model=False)
+    signal_list = glob.glob("./example_data/signal/*")[:10]
+    noise_list = glob.glob("./example_data/noise/*")[:10]
 
-    test_model(model_filename=model, config_filename=config)
+    model = "./Models/my_model.h5"
+    config = "./config/my_model.config"
+
+    predict_test_dataset(model, config, signal_list, noise_list, ckpt_model=False)
