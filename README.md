@@ -26,6 +26,10 @@ The signal dataset are signals with high SNR from STEAD (Mousavi et al., 2020).
 ./train.sh model_parfile
 ```
 
+#### Testing
+To test this package run after a successfull installation the command `./train.sh model_parfile`.
+When training is done, you can simply test the created model by running `python prediction.py`.
+
 #### Denoise data
 Run the function `predict` from file `prediction.py` with your created model and
 config file. The parameter data_list is a list with numpy arrays for denoising.
