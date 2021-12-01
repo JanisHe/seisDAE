@@ -117,7 +117,7 @@ def signal_to_noise_ratio(signal, noise):
     :param noise:
     :return:
     """
-    return 10 * np.log10(rms(signal) / rms(noise))
+    return 20 * np.log10(rms(signal) / rms(noise))
 
 
 if __name__ == "__main__":

@@ -40,3 +40,4 @@ f_init = open("__init__.py", "w")
 f_init.close()
 
 # XXX Create test!
+# XXX Create train.sh for user and conda environment
