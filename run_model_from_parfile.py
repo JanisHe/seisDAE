@@ -60,7 +60,8 @@ else:
         os.makedirs("./checkpoints")
 
     # Create optimizer  XXX Add more optimizers and set options
-    optimizer = tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-7, amsgrad=False,
+    optimizer = tf.keras.optimizers.Adam(learning_rate=float(parameters['learning_rate']),
+                                         beta_1=0.9, beta_2=0.999, epsilon=1e-7, amsgrad=False,
                                          name='Adam')
 
     # Set kernel regularizer

@@ -17,7 +17,7 @@ from scipy.signal import stft, istft
 from tensorflow.keras.utils import Sequence
 from tensorflow.keras.models import Model as TFmodel
 from tensorflow.keras.layers import Input, Conv2D, BatchNormalization, ReLU, Dropout, Conv2DTranspose, Cropping2D, \
-    MaxPooling2D, UpSampling2D, Dense, Softmax, Flatten, Reshape, Add
+    MaxPooling2D, UpSampling2D, Dense, Softmax, Flatten, Reshape, Add, LeakyReLU
 
 from pycwt import pycwt
 from utils import save_obj
@@ -99,7 +99,7 @@ def cropping_layer(needed_shape, is_shape):
 class Model:
 
     def __init__(self, ts_length=6001, dt=1.0, optimizer="adam",
-                 loss='mean_absolute_error', activation=None, drop_rate=0.001,
+                 loss='mean_absolute_error', activation=None, drop_rate=0.1,
                  use_bias=False, data_augmentation=True, shuffle=True, channels=2, decimation_factor=2, cwt=True,
                  callbacks=None, **kwargs):
 
@@ -192,7 +192,8 @@ class Model:
         h = Conv2D(filter_root, kernel_size, activation=self.activation, padding='same',
                    use_bias=self.use_bias, **kwargs)(input_layer)
         h = BatchNormalization()(h)
-        h = ReLU()(h)
+        # h = ReLU()(h)
+        h = LeakyReLU(alpha=0.1)(h)
         h = Dropout(rate=self.drop_rate)(h)
 
         # More Layers
@@ -200,7 +201,8 @@ class Model:
             h = Conv2D(int(2 ** i * filter_root), kernel_size, activation=self.activation, padding='same',
                        use_bias=self.use_bias, **kwargs)(h)
             h = BatchNormalization()(h)
-            h = ReLU()(h)
+            #h = ReLU()(h)
+            h = LeakyReLU(alpha=0.1)(h)
             h = Dropout(rate=self.drop_rate)(h)
 
             layer_shapes.update({i: (h.shape[1], h.shape[2])})
@@ -214,7 +216,8 @@ class Model:
                     h = MaxPooling2D(pool_size=pool_size, padding="same")(h)
 
                 h = BatchNormalization()(h)
-                h = ReLU()(h)
+                #h = ReLU()(h)
+                h = LeakyReLU(alpha=0.1)(h)
                 h = Dropout(rate=self.drop_rate)(h)
 
         # Fully Connected Layer
@@ -240,7 +243,8 @@ class Model:
                                     padding='same',
                                     use_bias=self.use_bias, strides=strides, **kwargs)(h)
             h = BatchNormalization()(h)
-            h = ReLU()(h)
+            #h = ReLU()(h)
+            h = LeakyReLU(alpha=0.1)(h)
             h = Dropout(rate=self.drop_rate)(h)
 
             # Crop network and add skip connections
@@ -251,7 +255,8 @@ class Model:
             h = Conv2D(int(2 ** i * filter_root), kernel_size, activation=self.activation, padding='same',
                        use_bias=self.use_bias, **kwargs)(h)
             h = BatchNormalization()(h)
-            h = ReLU()(h)
+            #h = ReLU()(h)
+            h = LeakyReLU(alpha=0.1)(h)
             h = Dropout(rate=self.drop_rate)(h)
 
         # Output layer
