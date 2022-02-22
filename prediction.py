@@ -15,7 +15,7 @@ from model import cwt_wrapper, Model, preprocessing
 from utils import load_obj
 
 
-def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_model=True):
+def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_model=False):
     """
     Function to predict data in data_list.
 
@@ -25,7 +25,7 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
         data_list: List that contains numpy arrays for denoising
         optimizer: tensorflow optimizer for Model. Necessary if ckpt_model is True, default is adam.
         ckpt_model; True if tensorflow checkpoints are used as model. Set False if a full trained model is used, but
-                    this is not necessary. Default is True
+                    this is not necessary. Default is False
 
     Returns:
          recovered: Array that contains recoverd signal and noise. Has shape len(data_list)*ts_length*2, where
