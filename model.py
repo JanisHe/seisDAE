@@ -438,16 +438,12 @@ class DataGenerator(Sequence):
         self.data_augmentation = data_augmentation
         self.kwargs = kwargs
 
-        if len(noise_list) == 0:
-            msg = "Could not load noise files from {}".format(noise_list)
+        if len(self.noise_list) == 0:
+            msg = "Could not load noise files from {}".format(self.noise_list)
             raise ValueError(msg)
 
         if len(self.signal_list) == 0:
-            msg = "No files in signal_pathname!"
-            raise ValueError(msg)
-
-        if len(self.noise_list) == 0:
-            msg = "No files in noise_pathname!"
+            msg = "Could not load noise files from {}".format(self.signal_list)
             raise ValueError(msg)
 
     def __len__(self):
