@@ -442,6 +442,14 @@ class DataGenerator(Sequence):
             msg = "Could not load noise files from {}".format(noise_list)
             raise ValueError(msg)
 
+        if len(self.signal_list) == 0:
+            msg = "No files in signal_pathname!"
+            raise ValueError(msg)
+
+        if len(self.noise_list) == 0:
+            msg = "No files in noise_pathname!"
+            raise ValueError(msg)
+
     def __len__(self):
         return int(np.floor(len(self.signal_list) / self.batch_size))
 
