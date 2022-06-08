@@ -4,6 +4,7 @@ Functions for prediction
 
 import random
 import obspy
+import time
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -124,7 +125,6 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
         if config['channels'] == 1:
             x_pred = X_pred[i, :, :, 0] * np.exp(1j * phases[i])
         elif config['channels'] == 2:
-            # x_pred = transform_list[i, :, :, 0] * np.exp(1j * X_pred[i, :, :, 1])
             transform_list[i, :, :, 1] = transform_list[i, :, :, 0] * X_pred[i, :, :, 0]   # Recovered Signal
             transform_list[i, :, :, 2] = transform_list[i, :, :, 0] * X_pred[i, :, :, 1]   # Recovered Noise
 

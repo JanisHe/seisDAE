@@ -2,13 +2,48 @@ import os
 import numpy as np
 import obspy
 import copy
+import asyncio
 from tqdm import tqdm
+import joblib
 
 from prediction import predict
 from utils import load_obj
 
 
-def denoising_trace(trace, model_filename, config_filename, overlap=0.5, chunksize=None, **kwargs):
+async def merge_traces(stream: obspy.Stream, header: dict):
+    """
+    Merging traces in one obspy Stream. Note, altough obspy has a merging routine with good tests, this function is
+    faster for the required method.
+    In older versions "st_denoised.merge(method=1, fill_value="interpolate")" was used to merge traces of one stream,
+    but this line was heavily time consuming.
+
+    :param stream:
+    :param header:
+
+    :returns
+    """
+
+    # Finding length for the resulting array
+    array_len = 0
+    for trace in stream:
+        array_len += trace.stats.npts
+
+    # Allocating emtpy array and putting values into array
+    data = np.zeros(array_len)
+    start = 0
+    for trace in stream:
+        data[start:start + trace.stats.npts] = trace.data
+        start += trace.stats.npts
+
+    # Create obspy stream
+    stream_out = obspy.Stream()
+    trace_out = obspy.Trace(data=data, header=header)
+    stream_out += trace_out
+
+    return stream_out
+
+
+def denoising_trace(trace, model_filename, config_filename, overlap=0.8, chunksize=None, **kwargs):
     """
     Denoising of an obspy Trace object using a trained Denoising Autoencoder.
 
@@ -24,10 +59,6 @@ def denoising_trace(trace, model_filename, config_filename, overlap=0.5, chunksi
 
     # Load config file
     config = load_obj(config_filename)
-
-    # if trace.stats.delta != config["dt"]:
-    #     msg = "Sampling rates of trace {} and denosing model are not equal".format(str(trace))
-    #     raise ValueError(msg)
 
     # Resample trace if sampling rate in config file and sampling rate of trace are not equal
     if trace.stats.delta != config['dt']:
@@ -48,7 +79,6 @@ def denoising_trace(trace, model_filename, config_filename, overlap=0.5, chunksi
         start = trace.stats.npts - config['ts_length']
         starttime_list.append(trace.stats.starttime + start * trace.stats.delta)
         data_list.append(trace.data[start:])
-        #data_list.append(np.concatenate((data, np.zeros(config["ts_length"] - len(data)))))
 
     # Denoise data by prediction
     if chunksize is not None and chunksize >= 1:
@@ -79,6 +109,7 @@ def denoising_trace(trace, model_filename, config_filename, overlap=0.5, chunksi
                                                                   location=trace.stats.location,
                                                                   channel=trace.stats.channel)
                              )
+
         tr_noi = obspy.Trace(data=recovered[i, :, 1], header=dict(delta=dt, starttime=starttime_list[i],
                                                                   station=trace.stats.station,
                                                                   network=trace.stats.network,
@@ -92,30 +123,81 @@ def denoising_trace(trace, model_filename, config_filename, overlap=0.5, chunksi
                 tr_den.trim(endtime=tr_den.stats.endtime - tr_den.stats.npts * tr_den.stats.delta * overlap / 2)
                 tr_noi.trim(endtime=tr_noi.stats.endtime - tr_noi.stats.npts * tr_noi.stats.delta * overlap / 2)
             elif i == recovered.shape[0] - 1:
-                tr_den.trim(starttime=tr_den.stats.starttime + tr_den.stats.npts * tr_den.stats.delta * overlap / 2)
-                tr_noi.trim(starttime=tr_noi.stats.starttime + tr_noi.stats.npts * tr_noi.stats.delta * overlap / 2)
+                tr_den.trim(starttime=st_denoised[-1].stats.endtime + dt)
+                tr_noi.trim(starttime=st_noise[-1].stats.endtime + dt)
             else:
-                tr_den.trim(starttime=tr_den.stats.starttime + tr_den.stats.npts * tr_den.stats.delta * overlap / 2,
+                tr_den.trim(starttime=st_denoised[-1].stats.endtime + dt,
                             endtime=tr_den.stats.endtime - tr_den.stats.npts * tr_den.stats.delta * overlap / 2)
-                tr_noi.trim(starttime=tr_noi.stats.starttime + tr_noi.stats.npts * tr_noi.stats.delta * overlap / 2,
+                tr_noi.trim(starttime=st_noise[-1].stats.endtime + dt,
                             endtime=tr_noi.stats.endtime - tr_noi.stats.npts * tr_noi.stats.delta * overlap / 2)
 
         st_denoised += tr_den
         st_noise += tr_noi
 
-    # Merge both streams and return traces
-    st_denoised.merge(fill_value="interpolate")
-    st_noise.merge(fill_value="interpolate")
+    # Merge both streams and return streams for recovered signal and noise
+    # Both merges are done in parallel with asyncIO
+    merge_loop = asyncio.get_event_loop()
+    st_denoised = merge_loop.run_until_complete(merge_traces(st_denoised, header=dict(delta=dt,
+                                                                                      starttime=starttime_list[0],
+                                                                                      station=trace.stats.station,
+                                                                                      network=trace.stats.network,
+                                                                                      location=trace.stats.location,
+                                                                                      channel=trace.stats.channel)))
 
-    # Trim streams on start- and endtime
-    st_denoised.trim(starttime=trace.stats.starttime, endtime=trace.stats.endtime)
-    st_noise.trim(starttime=trace.stats.starttime, endtime=trace.stats.endtime)
+    st_noise = merge_loop.run_until_complete(merge_traces(st_noise, header=dict(delta=dt,
+                                                                                starttime=starttime_list[0],
+                                                                                station=trace.stats.station,
+                                                                                network=trace.stats.network,
+                                                                                location=trace.stats.location,
+                                                                                channel=trace.stats.channel)))
 
     return st_denoised[0], st_noise[0]
 
 
+def denoising_stream(stream, model_filename, config_filename, overlap=0.8, chunksize=None, parallel=False, **kwargs):
+    """
+    Denoises an obspy stream and returns the recovered signal and noise as two separate streams.
+    Note, the parameters not mentioned in the description are given in denoising_trace.
+
+    :param parallel: bool, default is False
+                     If True, denoising is done in parallel otherwise one a single CPU
+    :returns: stream of recovered signal and noise
+    """
+
+    st_rec_signal = obspy.Stream()
+    st_rec_noise = obspy.Stream()
+
+    # Finding maximum number of CPUs
+    if parallel is True:
+        if len(stream) <= int(os.cpu_count() / 2):
+            n_jobs = len(stream)
+        else:
+            n_jobs = int(os.cpu_count() / 2)
+
+        # Run denoising for each trace in parallel
+        pool = joblib.Parallel(n_jobs=n_jobs, backend="multiprocessing", prefer="processes")
+        out = pool(joblib.delayed(denoising_trace)(trace=trace, model_filename=model_filename,
+                                                   config_filename=config_filename,
+                                                   overlap=overlap, chunksize=chunksize, **kwargs) for trace in stream)
+
+        # Sort streams from out in stream for recovered signal and noise
+        for traces in out:
+            st_rec_signal += traces[0]
+            st_rec_noise += traces[1]
+    else:
+        # Loop over each trace in stream and start denoising
+        for trace in stream:
+            tr_signal, tr_noise = denoising_trace(trace=trace, model_filename=model_filename,
+                                                   config_filename=config_filename,
+                                                   overlap=overlap, chunksize=chunksize, **kwargs)
+            st_rec_signal += tr_signal
+            st_rec_noise += tr_noise
+
+    return st_rec_signal, st_rec_noise
+
+
 def denoise(date, model_filename, config_filename, channels, pathname_data, network, station_name,
-            station_code, pathname_denoised, station_code_denoised, data_type="", **kwargs):
+            station_code, pathname_denoised, station_code_denoised, calib=1.0, noise=False, data_type="", **kwargs):
     """
     """
     # Read data for today
@@ -139,15 +221,27 @@ def denoise(date, model_filename, config_filename, channels, pathname_data, netw
     st_denoised = obspy.Stream()
     reclen = []
     for trace in st_orig:
-        denoised, _ = denoising_trace(trace=trace, model_filename=model_filename, config_filename=config_filename,
-                                      overlap=0.6, chunksize=600, **kwargs)
-        denoised.stats.channel = "{}{}".format(station_code_denoised, trace.stats.channel[2])
-        # Check for nan in denoised array an replace by zeros
-        np.nan_to_num(denoised.data, copy=False, nan=0.0)
-        # Change dtype for STEIM2 encoding
-        denoised.data = denoised.data.astype("int32")
-        reclen.append(trace.stats.mseed['record_length'])
-        st_denoised += denoised
+        denoised, noisy = denoising_trace(trace=trace, model_filename=model_filename, config_filename=config_filename,
+                                          overlap=0.8, chunksize=600, **kwargs)
+        if noise is False:
+            denoised.stats.channel = "{}{}".format(station_code_denoised, trace.stats.channel[2])
+            # Check for nan in denoised array an replace by zeros
+            np.nan_to_num(denoised.data, copy=False, nan=0.0)
+            # Change dtype for STEIM2 encoding
+            denoised.data = denoised.data * calib
+            denoised.data = denoised.data.astype("int32")
+            reclen.append(trace.stats.mseed['record_length'])
+            st_denoised += denoised
+        else:
+            noisy.stats.channel = "{}{}".format(station_code_denoised, trace.stats.channel[2])
+            # Check for nan in denoised array an replace by zeros
+            np.nan_to_num(noisy.data, copy=False, nan=0.0)
+            # Change dtype for STEIM2 encoding
+            noisy.data = noisy.data * calib
+            noisy.data = noisy.data.astype("int32")
+            reclen.append(trace.stats.mseed['record_length'])
+            st_denoised += noisy
+
     st_denoised.merge(method=1, fill_value=0)
     st_denoised.sort(keys=['channel'], reverse=True)
 
@@ -170,7 +264,52 @@ def denoise(date, model_filename, config_filename, channels, pathname_data, netw
                                                                             denoised.stats.starttime.julday
                                                                             )
 
-        #denoised.trim(endtime=denoised.stats.endtime - 60)  # XXX
         # Write full stream
+        print("Writing data to {}".format(filename))
         denoised.write(filename=filename,
                        format="MSEED", encoding="STEIM2", byteorder=">", reclen=reclen[i])
+
+
+if __name__ == "__main__":
+    from obspy import UTCDateTime, read, Stream
+    from obspy.clients.filesystem.sds import Client as LocalClient
+    import matplotlib.pyplot as plt
+    import os
+    import time
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+    starttime = obspy.UTCDateTime("2020-03-04 08:11")
+    endtime = starttime + 4*3600
+
+    client = LocalClient("/data/denoise/data/raw_data/SDS/")
+    st = client.get_waveforms(network="BW", station="ROTZ", location="*", channel="HH?", starttime=starttime,
+                              endtime=endtime)
+
+    d_stime = time.time()
+    # XXX Function that takes stream and denoises each stream in parallel instead
+    st_denoised, st_noise = denoising_stream(st, model_filename="/home/janis/CODE/cwt_denoiser/Models/BW_ROTZ_stft.h5",
+                                             config_filename="/home/janis/CODE/cwt_denoiser/config/BW_ROTZ_stft.config",
+                                             overlap=0.8, parallel=False, ckpt_model=False)
+    d_etime = time.time()
+    print("needed {} s for denoising".format(d_etime - d_stime))
+
+    fig = plt.figure()
+    # Plot original stream
+    c = 1
+    for i, tr in enumerate(st):
+        if i == 0:
+            ax = fig.add_subplot(3, 2, i + c)
+        else:
+            ax = fig.add_subplot(3, 2, i + c, sharex=ax)
+        ax.plot(tr.data, color="k")
+        c += 1
+
+    # Plot denoised stream
+    c = 2
+    for i, tr in enumerate(st_denoised):
+        ax = fig.add_subplot(3, 2, i + c, sharex=ax)
+        ax.plot(tr.data, color="k")
+        c += 1
+
+    plt.show()
