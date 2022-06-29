@@ -17,10 +17,11 @@ async def merge_traces(stream: obspy.Stream, header: dict):
     In older versions "st_denoised.merge(method=1, fill_value="interpolate")" was used to merge traces of one stream,
     but this line was heavily time consuming.
 
-    :param stream:
-    :param header:
+    :param stream: obspy Stream object that contains all traces that will be merged
+    :param header: Dictionary that contains information for the stats of the merged stream. For more information
+                   about the stats have a look on the stats of an obspy trace.
 
-    :returns
+    :returns: One obspy stream object instead of several single overlapping traces.
     """
 
     # Finding length for the resulting array
@@ -52,7 +53,7 @@ def denoising_trace(trace, model_filename, config_filename, overlap=0.8, chunksi
     :param config_filename: filename of the config file for the denoising model
     :param overlap: overlap between neighbouring elements in trace [0, 1]
     :param chunksize: int, for denosing of large traces, a trace is splitted into parts of chunksize, otherwise
-                      the data might not fit into memory.
+                      the data might not fit into memory. In particular it is necessary when CWT is used.
 
     :returns: denoised trace, noisy trace
     """
@@ -159,6 +160,12 @@ def denoising_stream(stream, model_filename, config_filename, overlap=0.8, chunk
     Denoises an obspy stream and returns the recovered signal and noise as two separate streams.
     Note, the parameters not mentioned in the description are given in denoising_trace.
 
+    :param stream: obspy stream object
+    :param model_filename: Filename of a trained autoencoder
+    :param config_filename: Filename of the config file that belongs to the autoencoder
+    :param overlap: overlap between neighbouring segments. Default is 0.8
+    :param chunksize: If the model has many parameters, e.g. when CWT is used, chunksize splits all 60 s windows
+                      into small chunks to reduce the memory. A value of 600 - 800 is recommended. Default is None.
     :param parallel: bool, default is False
                      If True, denoising is done in parallel otherwise one a single CPU
     :returns: stream of recovered signal and noise
@@ -199,6 +206,26 @@ def denoising_stream(stream, model_filename, config_filename, overlap=0.8, chunk
 def denoise(date, model_filename, config_filename, channels, pathname_data, network, station_name,
             station_code, pathname_denoised, station_code_denoised, calib=1.0, noise=False, data_type="", **kwargs):
     """
+    Function reads an obspy stream of a certain data and denoises all traces of the stream. Afterwards, the denoised
+    stream is saved in pathname_denoised in SDS format, i.e. pathname_data/year/network/station/channel/stream.doy
+
+    :param date: Date to read the input stream of type obspy.UTCDateTime
+    :param model_filename: Filename of a trained autoencoder
+    :param config_filename: Filename of the config file that belongs to the autoencoder
+    :param channels: Names of channels, e.g. ZNE
+    :param pathname_data: Full pathname of the raw data
+    :param network: Name of the network
+    :param station_name: Name of the station
+    :param station_code: Station code of the station, e.g. EH or HH
+    :param pathname_denoised: Full pathname for the denoised data
+    :param station_code_denoised: Station code for the denoised data, e.g. EH or SX
+    :param calib: Calibration factor for the denoised data. The denoised data are mutilplied with the calib factor to
+                  avoid last bits in the denoised data. Default is 1.0
+    :param noise: If True the recovered noise the saved, otherwise the recovered signal is saved. Default is False
+    :param data_type: Data type of the input data, e.g. D. For more information see Seed manual. Default is an empty
+                      string.
+
+    :returns: None
     """
     # Read data for today
     st_orig = obspy.Stream()
@@ -211,7 +238,6 @@ def denoise(date, model_filename, config_filename, channels, pathname_data, netw
         for trace in st_orig:
             trace.data = trace.data - np.mean(trace.data)
         st_orig.merge(fill_value=0)
-
 
     # Sort streams in same order, thus later loops have the same indices for st_orig and st_denoised
     st_orig.sort(keys=['channel'], reverse=True)
