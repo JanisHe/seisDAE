@@ -25,17 +25,18 @@ else:
         os.makedirs("./model_parfiles")
     shutil.copyfile(src=parfile, dst="./model_parfiles/{}.parfile".format(parameters['filename']))
 
-    # Set up everthing to start training of model
+    # Set up everything to start training of model
     # Setup for GPU
     # XXX Test whether selected GPU is used, otherwise use different GPU
+    # CUDA-VISIBLE_DEVICES is set automatically by gridengine
     #if tf.test.is_gpu_available(cuda_only=False, min_cuda_compute_capability=None) is True:
-    try:
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(parameters['num_gpu'])
-        print("Run job on GPU {}".format(parameters['num_gpu']))
-    except KeyError:
-        warnings.warn("Run on GPU 0 because 'num_gpu' is not defined!")
-        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-        print("Run job on GPU 0")
+    # try:
+    #     #os.environ["CUDA_VISIBLE_DEVICES"] = str(parameters['num_gpu'])
+    #     print("Run job on GPU {}".format(parameters['num_gpu']))
+    # except KeyError:
+    #     warnings.warn("Run on GPU 0 because 'num_gpu' is not defined!")
+    #     #os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+    #     print("Run job on GPU 0")
     os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 
     # Setup for signal and noise files
@@ -47,7 +48,7 @@ else:
         pass
 
     # Create callbacks
-    import tensorflow as tf   # Importing tensorflow earlier leads to running script on more then one GPU
+    import tensorflow as tf   # Importing tensorflow earlier leads to running script on more than one GPU
     callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=parameters['patience'], verbose=1),
                  tf.keras.callbacks.ModelCheckpoint(filepath="./checkpoints/{}/latest_checkpoint.ckpt".
                                                     format(parameters['filename']),
@@ -59,16 +60,18 @@ else:
     if not os.path.exists("./checkpoints"):
         os.makedirs("./checkpoints")
 
-    # Create optimizer  XXX Add more optimizers and set options
+    # Create optimizer  TODO: Add more optimizers and set options
     optimizer = tf.keras.optimizers.Adam(learning_rate=float(parameters['learning_rate']),
                                          beta_1=0.9, beta_2=0.999, epsilon=1e-7, amsgrad=False,
                                          name='Adam')
 
     # Set kernel regularizer
+    # Test with different regularizers show no difference in training, and thus regularizer is set to 0.
     kernel_regularizer = tf.keras.regularizers.L2(0)
 
     # Create Model
     # 1. Read all needed parameters or generate them if not available
+    # XXX Replace try except statements by one functions with parameters
     try:
         drop_rate = parameters['drop_rate']
     except KeyError:
