@@ -21,7 +21,7 @@ setup(
         'License :: ',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Operating System :: OS Independent',
+        'Operating System :: OS Independent, but only tested on Ubuntu and Debian',
         'Topic :: Software Development :: Libraries :: Python Modules',
         'Topic ::',
         'Intended Audience :: Science/Research'
@@ -39,5 +39,8 @@ os.system('python setup.py install')
 f_init = open("__init__.py", "w")
 f_init.close()
 
-# XXX Create test!
-# XXX Create train.sh for user and conda environment
+
+print("\n#" * 20)
+print("To train your first model run 'python run_model_from_parfile.py ./model_parfile' from the command line.")
+print("A model is trained from the example dataset. Change the parfile to train your first own model.")
+print("#" * 20 + "\n")

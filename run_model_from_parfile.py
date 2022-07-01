@@ -7,15 +7,14 @@ import warnings
 from model import Model
 from utils import readtxt
 
-if len(sys.argv) <= 1:
-    msg = "Argument for parameters file is not there. Run e.g. by 'bash train.sh model_parfile'"
-    raise RuntimeError(msg)
-elif len(sys.argv) > 1 and os.path.isfile(sys.argv[1]) is False:
-    msg = "The given file {} does not exist. Perhaps take the full path of the file.".format(sys.argv[1])
-    raise FileNotFoundError(msg)
-else:
-    # Read parfile
-    parfile = sys.argv[1]
+
+def main(parfile):
+    """
+    Main script to start training of the denoising autoencoder.
+    All controlling parameters are defined in argument parfile.
+
+    :param parfile: Full pathname of the parfile
+    """
 
     print("Reading data input arguments from {}".format(parfile))
     parameters = readtxt(parfile)
@@ -158,3 +157,17 @@ else:
     # Save model and plot ist history
     m.save_model(filename=parameters["filename"])
     m.plot_history(filename=parameters["filename"])
+
+
+if __name__ == "__main__":
+    if len(sys.argv) <= 1:
+        msg = "Argument for parameters is missing. Run example."
+        parfile = "./model_parfile"
+    elif len(sys.argv) > 1 and os.path.isfile(sys.argv[1]) is False:
+        msg = "The given file {} does not exist. Perhaps take the full path of the file.".format(sys.argv[1])
+        raise FileNotFoundError(msg)
+    else:
+        parfile = sys.argv[1]
+
+    # Start to run training with parameters from parfile
+    main(parfile=parfile)

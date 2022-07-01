@@ -4,7 +4,6 @@ Functions for prediction
 
 import random
 import obspy
-import time
 
 import numpy as np
 import matplotlib.pyplot as plt
