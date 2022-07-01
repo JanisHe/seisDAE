@@ -14,7 +14,7 @@ setup(
     packages=[],
     install_requires=[],
     python_requires='>=3',
-    long_description='',
+    long_description='README.md',
     keywords=[],
     classifiers=[
         'Development Status :',
