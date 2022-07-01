@@ -39,8 +39,7 @@ os.system('python setup.py install')
 f_init = open("__init__.py", "w")
 f_init.close()
 
-
-print("\n#" * 20)
+print("\n" + "#" * 20)
 print("To train your first model run 'python run_model_from_parfile.py ./model_parfile' from the command line.")
 print("A model is trained from the example dataset. Change the parfile to train your first own model.")
 print("#" * 20 + "\n")

@@ -6,19 +6,23 @@ This package is based on the work by
  * Zhu, W.; Mousavi, S. M. & Beroza, G. C. Seismic signal denoising and decomposition using deep neural networks IEEE Transactions on Geoscience and Remote Sensing, IEEE, 2019, 57, 9476-9488
  * Tibi, R.; Hammond, P.; Brogan, R.; Young, C. J. & Koper, K. Deep Learning Denoising Applied to Regional Distance Seismic Data in Utah Bulletin of the Seismological Society of America, 2021 
 
-Before starting, run the following command:
-```
-python setup.py install
-```
-There will be created a few new directories and the PyCWT packages is downloaded form GitHub,
-which is necessary for computation of CWT.
-The following packages should be installed in your Python environment:
+Before starting, run the following command, please have the following packages installed:
  * Numpy
  * Matplotlib
  * Scipy
  * Tensorflow >= 2.0
  * Obspy 
  * Joblib
+ 
+Otherwise run the foloowing command in your conda environment:
+```
+conda create -c conda-forge -n denoiser python=3.8 numpy=1.20 scipy=1.4.1 matplotlib obspy joblib tensorflow>=2.0
+```
+```
+python setup.py install
+```
+There will be created a few new directories and the PyCWT packages is downloaded form GitHub,
+which is necessary for computation of CWT.
  
 After the installation of all packages, you can train the example by running
 
