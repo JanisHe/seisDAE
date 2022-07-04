@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/cwt_denoiser.iml" filepath="$PROJECT_DIR$/.idea/cwt_denoiser.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/seismic_denoiser.iml" filepath="$PROJECT_DIR$/.idea/seismic_denoiser.iml" />
     </modules>
   </component>
 </project>
