@@ -14,9 +14,9 @@ Before starting, run the following command, please have the following packages i
  * Obspy 
  * Joblib
  
-Otherwise run the foloowing command in your conda environment:
+Otherwise run the following command in your conda environment:
 ```
-conda create -c conda-forge -n denoiser python=3.8 numpy=1.20 scipy=1.4.1 matplotlib obspy joblib tensorflow>=2.0
+conda create -c conda-forge -n denoiser python=3.8 numpy=1.20 scipy=1.4.1 matplotlib obspy joblib "tensorflow>=2.0"
 ```
 ```
 python setup.py install
@@ -33,7 +33,11 @@ python run_model_from_parfile.py
 
 The training of the example dataset will take a while. It depends whether you run it on CPU or GPU.
 The trained model is saved in the directory `./Models` and is named `my_model.h5`. The config file is saved 
-in `./config` und `my_model.config`. If training was successfull, you can predict your first dataset by
+in `./config` und `my_model.config`. 
+In some cases, the training might be killed because of full memory. Then open `model_parfile` and set the parameters
+`workers` and `max_queue_size` to lower values.
+
+If training was successfull, you can predict your first dataset by
 ```
 python prediction.py
 ```
