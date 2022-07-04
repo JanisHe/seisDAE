@@ -6,7 +6,7 @@
       <excludeFolder url="file://$MODULE_DIR$/pycwt/dist" />
       <excludeFolder url="file://$MODULE_DIR$/pycwt/pycwt.egg-info" />
     </content>
-    <orderEntry type="jdk" jdkName="Python 3.7 (py37)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Python 3.8 (py38)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="PyDocumentationSettings">

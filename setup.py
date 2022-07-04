@@ -4,12 +4,12 @@ from setuptools import setup
 AUTHORS = ('Janis Heuel'),
 
 setup(
-    name='cwt_denoiser',
+    name='seismic denoiser',
     version='0.0.1',
     author=AUTHORS,
     author_email='janis.heuel@ruhr-uni-bochum.de',
     description=('Denoising Autoencoder to remove noise from seismic  data'),
-    license='',
+    license=' GNU General Public License (version 3 or higher)',
     url='',
     packages=[],
     install_requires=[],
@@ -18,7 +18,7 @@ setup(
     keywords=[],
     classifiers=[
         'Development Status :',
-        'License :: ',
+        'License :: GNU General Public License (version 3 or higher)',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
         'Operating System :: OS Independent, but only tested on Ubuntu and Debian',
