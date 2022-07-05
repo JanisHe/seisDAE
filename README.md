@@ -60,7 +60,12 @@ Afterwards, adjust the parfile and start your training.
 Run the function `predict` from file `prediction.py` with your created model and
 config file. The parameter data_list is a list with numpy arrays for denoising.
 Using `prediction.py` only denoises time windows of the same length as for the training dataset,
-but in many cases it is necessary to denoise longer time series.
+but in many cases it is necessary to denoise longer time series (see next section).
+
+The directory `./example_data/noisy_signals` contains nine noisy time series from the station RN.BAVN (for more 
+information please have a closer look to the first mentioned paper). You can denoise these examples and compare
+the result to different filter methods by running the script `./denoiser_comparison/comparison.py`. Note, this
+repository does not include pre trained models as they need much memory.
 
 #### Denoise long seismograms
 If your seismogram is longer than your seismograms from the training dataset, the longer time series is split into
