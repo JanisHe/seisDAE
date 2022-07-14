@@ -5,6 +5,7 @@ import copy
 import asyncio
 from tqdm import tqdm
 import joblib
+import pandas as pd
 
 from prediction import predict
 from utils import load_obj
@@ -42,6 +43,55 @@ async def merge_traces(stream: obspy.Stream, header: dict):
     stream_out += trace_out
 
     return stream_out
+
+
+def read_seismic_data(date: obspy.UTCDateTime, sds_dir: str, network: str, station: str,
+                      station_code="EH", channels="ZNE", data_type="D"):
+    """
+    Reads seismic data from SDS structure for a certain date.
+    https://www.seiscomp.de/seiscomp3/doc/applications/slarchive/SDS.html (2022-07-11)
+
+    :param date: Obspy UTCDateTime object to read seismic data from SDS structure
+    :param sds_dir: Pathname for SDS directory
+    :param network: Name of seismic network
+    :param station: Name of seismic station
+    :param station_code: Name of the station code, e.g. EH, HH or BH
+    :param channels: Name of channels, e.g. ZNE or Z12
+    :param data_type: 1 characters indicating the data type, recommended types are:
+                    'D' - Waveform data
+                    'E' - Detection data
+                    'L' - Log data
+                    'T' - Timing data
+                    'C' - Calibration data
+                    'R' - Response data
+                    'O' - Opaque data
+                    Default is "D". Empty string is also allowed.
+
+    :returns: Obspy stream object that contains all traces. In case of gaps, traces of same IDs are merged and
+              gaps are filled by zeros.
+    """
+
+    # Add . to data_type if not set in input
+    if "." not in data_type:
+        data_type = ".{}".format(data_type)
+
+    # Read data
+    stream = obspy.Stream()
+    for channel in channels:
+        stream += obspy.read("{}/{:04d}/{}/{}/{}{}{}/*{:03d}".format(sds_dir, date.year, network, station,
+                                                                     station_code, channel, data_type,
+                                                                     date.julday))
+
+    # Merge original stream
+    if len(stream) > len(channels):
+        for trace in stream:
+            trace.data = trace.data - np.mean(trace.data)
+        stream.merge(fill_value=0)
+
+    # Sort traces in stream
+    stream.sort(keys=['channel'], reverse=True)
+
+    return stream
 
 
 def denoising_trace(trace, model_filename, config_filename, overlap=0.8, chunksize=None, **kwargs):
@@ -171,6 +221,11 @@ def denoising_stream(stream, model_filename, config_filename, overlap=0.8, chunk
     :returns: stream of recovered signal and noise
     """
 
+    # Check whether input stream is not empty
+    if len(stream) == 0:
+        msg = "The input stream does not contain any data.\n{}".format(str(stream))
+        raise ValueError(msg)
+
     st_rec_signal = obspy.Stream()
     st_rec_noise = obspy.Stream()
 
@@ -227,20 +282,8 @@ def denoise(date, model_filename, config_filename, channels, pathname_data, netw
 
     :returns: None
     """
-    # Read data for today
-    st_orig = obspy.Stream()
-    for channel in channels:
-        st_orig += obspy.read("{}/{:04d}/{}/{}/{}{}{}/*{:03d}".format(pathname_data, date.year, network, station_name,
-                                                                      station_code, channel, data_type,
-                                                                      date.julday))
-    # Merge original stream
-    if len(st_orig) > len(channels):
-        for trace in st_orig:
-            trace.data = trace.data - np.mean(trace.data)
-        st_orig.merge(fill_value=0)
-
-    # Sort streams in same order, thus later loops have the same indices for st_orig and st_denoised
-    st_orig.sort(keys=['channel'], reverse=True)
+    # Read data for input date
+    st_orig = read_seismic_data(date, pathname_data, network, station_name, station_code, channels, data_type)
 
     # Denoise original stream object
     # Loop over each trace in original stream and apply denoising method
@@ -294,3 +337,222 @@ def denoise(date, model_filename, config_filename, channels, pathname_data, netw
         print("Writing data to {}".format(filename))
         denoised.write(filename=filename,
                        format="MSEED", encoding="STEIM2", byteorder=">", reclen=reclen[i])
+
+
+def check_endtime(stream1: obspy.Stream, stream2: obspy.Stream, channels="ZNE"):
+    """
+    Checks whether all traces in two different obspy streams have the same endtime or not.
+    Returns False if endtimes are not equal, otherwise True.
+
+    :param stream1: obspy stream
+    :param stream2: obspy stream
+    :param channels: Channel names of both streams.
+
+    :returns: bool
+    """
+
+    if len(stream1) == len(stream2):
+        same_endtime = True
+        for channel in channels:
+            # Note, added some time if a difference exists due do decimation in DAE
+            if stream2.select(component=channel)[0].stats.endtime < \
+                    stream1.select(component=channel)[0].stats.endtime - stream2[0].stats.delta * 5:
+                same_endtime = False
+    else:
+        same_endtime = False
+
+    return same_endtime
+
+
+def _auto_denoiser(date: obspy.UTCDateTime, model_filename: str, config_filename: str,
+                   sds_dir_noisy: str, sds_dir_denoised: str, network: str, station: str,
+                   station_code_noisy="EH", station_code_denoised="EX", channels="ZNE",
+                   data_type="D", calib=1.0, **kwargs):
+    """
+    Denoises an obspy stream for a given date and writes the denoised traces for each component to an SDS path.
+
+    :param date: obspy UTCDateTime object. Date for which data are read
+    :param model_filename: Full pathname of the previously trained denoising autoencoder
+    :param config_filename: Full pathname of the config file for the denoising autoencoder
+    :param sds_dir_noisy: Base directory of the SDS for reading data
+    :param sds_dir_denoised: Base directory of the SDS to write denoised data
+    :param network: Name of the network
+    :param station: Name of the station
+    :param station_code_noisy: Station code of the noisy data, e.g. EH, HH or BH
+    :param station_code_denoised: Station code of the denoised data, e.g. EX, HX or SX
+    :param channels: Channels of the input data, e.g. ZNE or Z12
+    :param data_type: 1 characters indicating the data type, recommended types are:
+                    'D' - Waveform data
+                    'E' - Detection data
+                    'L' - Log data
+                    'T' - Timing data
+                    'C' - Calibration data
+                    'R' - Response data
+                    'O' - Opaque data
+                    Default is "D". Empty string is also allowed.
+    :param calib: Denoised data are mutiplied by this factor in order to avoid last bits in the denoised data.
+                  Note, when analysing the data afterwards, the calib factor is not saved in the written trace.
+                  Default is 1.0
+    :param kwargs: Keywords arguments for the denoiser
+
+    :returns: 1. The full denoised stream for the given date
+              2. When some data at the given date are already denoised a trimmed stream that only contains the new
+                 denoised data is also returned. This is sometimes necessary, when data are analysed with
+                 Seiscomp afterwards and Seiscomps saves the data automatically.
+              3. reclen for each trace. Is necessary to save the data in STEIM2.
+
+              If no new data are found, three Nones are returned by this function.
+
+    """
+
+    # Read data for noisy and denoised stream
+    try:
+        noisy_stream = read_seismic_data(date, sds_dir_noisy, network, station, station_code_noisy,
+                                         channels, data_type)
+    except Exception as e:
+        print(e)
+        return None, None, None
+
+    try:
+        denoised_stream = read_seismic_data(date, sds_dir_denoised, network, station, station_code_denoised,
+                                            channels, data_type)
+    except Exception:
+        denoised_stream = obspy.Stream()
+
+    # Check for same endtime
+    same_endtime = check_endtime(noisy_stream, denoised_stream, channels)
+
+    # Denoise data in two different ways:
+    # 1. If a denoised stream already exists, then the new data are denoised and added to existing data
+    # 2. If no denoised stream exists, a new stream is created and written afterwards
+    endtime_denoised = None
+    if len(denoised_stream) == len(noisy_stream):
+        endtime_denoised = []
+        for i, trace in enumerate(denoised_stream):
+            endtime_denoised_helper = trace.stats.endtime
+            noisy_stream[i].trim(starttime=endtime_denoised_helper - 300)  # XXX May lead to masked arrays
+            endtime_denoised.append(endtime_denoised_helper)
+
+    # Loop over each trace in original stream and apply denoising method
+    if same_endtime is False:
+        # Add record length from original stream to empty list
+        reclen = []
+        for trace in noisy_stream:
+            reclen.append(trace.stats.mseed['record_length'])
+
+        # Start denoising for each trace
+        denoised, _ = denoising_stream(stream=noisy_stream, model_filename=model_filename,
+                                       config_filename=config_filename,
+                                       overlap=0.8, chunksize=600, parallel=True, **kwargs)
+
+        for trace in denoised:
+            trace.stats.channel = "{}{}".format(station_code_denoised, trace.stats.channel[2])
+            # Check for nan in denoised array an replace by zeros
+            np.nan_to_num(trace.data, copy=False, nan=0.0)
+            # Multiply data in trace by calib to avoid lat bit
+            if float(calib) != 1.0:
+                trace.data = trace.data * calib
+            # Change dtype for STEIM2 encoding
+            trace.data = trace.data.astype("int32")
+            denoised_stream += trace
+
+        # Merge all traces of same id in denoised stream
+        denoised_stream.merge(method=1, fill_value=0)
+        denoised_stream.sort(keys=['channel'], reverse=True)
+
+        # Write each denoised trace into single mseed
+        for i, denoised in enumerate(denoised_stream):
+            # Make directories if they do not exist
+            full_pathname = "{}{:04d}/{}/{}/{}{}".format(sds_dir_denoised, date.year, network, station,
+                                                         denoised.stats.channel, data_type)
+            if not os.path.exists(full_pathname):
+                os.makedirs(full_pathname)
+
+            filename = "{}{:04d}/{}/{}/{}{}/{}.{}.{}.{}.D.{:04d}.{:03d}".format(sds_dir_denoised, date.year, network,
+                                                                                station, denoised.stats.channel,
+                                                                                data_type,
+                                                                                denoised.stats.network,
+                                                                                denoised.stats.station,
+                                                                                denoised.stats.location,
+                                                                                denoised.stats.channel,
+                                                                                denoised.stats.starttime.year,
+                                                                                denoised.stats.starttime.julday
+                                                                                )
+
+            # Write full stream
+            denoised.write(filename=filename,
+                           format="MSEED", encoding="STEIM2", byteorder=">", reclen=reclen[i])
+
+        # Return denoised stream and a copy that only contains the new denoised data
+        # Both returned values are obspy streams
+        denoised_stream_cp = denoised_stream.copy()
+        if endtime_denoised:
+            for i, trace in enumerate(denoised_stream_cp):
+                trace.trim(starttime=endtime_denoised[i] + denoised.stats.delta)
+
+        return denoised_stream, denoised_stream_cp, reclen
+
+
+def read_csv(filename: str, date=obspy.UTCDateTime(), **kwargs):
+    """
+    Function reads a csv file for the auto denoiser and returns a dictionary for each station that is given in
+    the input csv file. Keyword arguments are for pandas.read_csv function.
+    """
+
+    # Read csv file
+    df_csv = pd.read_csv(filename, **kwargs)
+
+    # Create a dictionary for each station in df_csv / csv_file
+    df_dict = {}
+    for i, station in enumerate(df_csv["station"]):
+        network = df_csv["network"][i]
+
+        # Add . to data_type if not set in input
+        if df_csv['type'][i] != ".":
+            data_type = ".{}".format(df_csv['type'][i])
+        else:
+            data_type = df_csv['type'][i]
+
+        # Update dict
+        df_dict.update({"{}.{}".format(network, station): dict(date=date,
+                                                               model_filename=df_csv['dae_model'][i],
+                                                               config_filename=df_csv['config'][i],
+                                                               sds_dir_noisy=df_csv['sdsdir'][i],
+                                                               sds_dir_denoised=df_csv['sds_out'][i],
+                                                               network=df_csv['network'][i],
+                                                               station=df_csv['station'][i],
+                                                               station_code_noisy=df_csv['channel_code'][i],
+                                                               station_code_denoised=df_csv['channel_code_denoised'][i],
+                                                               channels=df_csv['channel_direction'][i],
+                                                               data_type=data_type,
+                                                               calib=float(df_csv['calib'][i])
+                                                               )
+                        }
+                       )
+
+    return df_dict
+
+
+def auto_denoiser(csv_file: str, date: obspy.UTCDateTime, n_cores=1):
+    """
+    Starts automatic denoising by reading parameters for each station from a csv file.
+    Which data are read is controlled by the given date as this is not defined in the csv file.
+    This function can run in parallel by joblib but it is not recommended as it might lead to an overload.
+
+    :param csv_file: Full filename of the input csv file
+    :param date: obspy UTCDateTime for denoising data
+    :param n_cores: Number of cores to run denoising in parallel. Be careful when denoising several stations in
+                    parallel, as method denosing_stream is already parallelised to speed up computation time.
+                    Default is 1 core. Higher numbers might result in an overload.
+
+    :returns: All traces and results that are returned by the function _auto_denoiser
+    """
+
+    # Create a dictionary for each station in df_csv / csv_file
+    auto_denoiser_dict = read_csv(csv_file, date, delimiter=",", comment="#")
+
+    # Start auto denoiser for each station in auto_denoiser_dict
+    pool = joblib.Parallel(n_jobs=n_cores, backend="multiprocessing", prefer="processes")
+    out = pool(joblib.delayed(_auto_denoiser)(**auto_denoiser_dict[item]) for item in auto_denoiser_dict)
+
+    return out

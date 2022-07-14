@@ -13,10 +13,12 @@ Before starting, run the following command, please have the following packages i
  * Tensorflow >= 2.0
  * Obspy 
  * Joblib
+ * Pandas
  
 Otherwise run the following command in your conda environment:
 ```
-conda create -c conda-forge -n denoiser python=3.8 numpy=1.20 scipy=1.4.1 matplotlib obspy joblib "tensorflow>=2.0"
+conda create -c conda-forge -n denoiser python=3.8 numpy=1.20 scipy=1.4.1 
+matplotlib obspy pandas joblib "tensorflow>=2.0"
 ```
 ```
 python setup.py install
@@ -73,3 +75,9 @@ overlapping segments, e.g. 60 s segments. Each of these segments is denoised and
 merged to get one denoises time series. 
 The script `./denoiser/denoiser_utils.py` contains the function 'denoising_stream' that removes the noise
 from all traces in a obspy stream object. For more details please read the function description.
+
+#### Automatic denoiser
+In many cases one needs real time denoising to analyse the denoised traces e.g. with Seiscomp.
+The function `auto_denoiser` in `./denoiser.denoiser_utils.py` reads a list with all required parameters
+from a csv file (`./denoiser/autp_denoiser.csv`). By adding a date, it is possible to start a cron job
+that denoises the defined stations regulary. 
