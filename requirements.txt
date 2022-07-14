@@ -4,3 +4,4 @@ matplotlib
 tensorflow >= 2
 obspy
 joblib
+pandas
