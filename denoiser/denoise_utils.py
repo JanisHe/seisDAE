@@ -31,6 +31,7 @@ async def merge_traces(stream: obspy.Stream, header: dict):
         array_len += trace.stats.npts
 
     # Allocating emtpy array and putting values into array
+    # TODO: Merge traces with arithmetic mean and a small overlap
     data = np.zeros(array_len)
     start = 0
     for trace in stream:
@@ -46,7 +47,7 @@ async def merge_traces(stream: obspy.Stream, header: dict):
 
 
 def read_seismic_data(date: obspy.UTCDateTime, sds_dir: str, network: str, station: str,
-                      station_code="EH", channels="ZNE", data_type="D"):
+                      station_code="EH", channels="ZNE", data_type="D", overlap=False, **kwargs):
     """
     Reads seismic data from SDS structure for a certain date.
     https://www.seiscomp.de/seiscomp3/doc/applications/slarchive/SDS.html (2022-07-11)
@@ -80,7 +81,31 @@ def read_seismic_data(date: obspy.UTCDateTime, sds_dir: str, network: str, stati
     for channel in channels:
         stream += obspy.read("{}/{:04d}/{}/{}/{}{}{}/*{:03d}".format(sds_dir, date.year, network, station,
                                                                      station_code, channel, data_type,
-                                                                     date.julday))
+                                                                     date.julday), **kwargs)
+
+        # Try to read data from the day before and the next day to add some overlap for denoising
+        if overlap is True:
+            # Day before
+            try:
+                day_before = date - 86400
+                stime = obspy.UTCDateTime(f"{day_before.date.isoformat()} 23:50")
+                stream += obspy.read("{}/{:04d}/{}/{}/{}{}{}/*{:03d}".format(sds_dir, day_before.year, network, station,
+                                                                             station_code, channel, data_type,
+                                                                             day_before.julday),
+                                     starttime=stime)
+            except Exception:
+                pass
+
+            # Day after
+            try:
+                day_after = date + 86400
+                etime = obspy.UTCDateTime(f"{day_after.date.isoformat()} 00:10")
+                stream += obspy.read("{}/{:04d}/{}/{}/{}{}{}/*{:03d}".format(sds_dir, day_after.year, network, station,
+                                                                             station_code, channel, data_type,
+                                                                             day_after.julday),
+                                     endtime=etime)
+            except Exception:
+                pass
 
     # Merge original stream
     if len(stream) > len(channels):
@@ -283,7 +308,9 @@ def denoise(date, model_filename, config_filename, channels, pathname_data, netw
     :returns: None
     """
     # Read data for input date
-    st_orig = read_seismic_data(date, pathname_data, network, station_name, station_code, channels, data_type)
+    # TODO: Add some overlapping to the day before if available and trim afterwards before writing denoised stream
+    st_orig = read_seismic_data(date, pathname_data, network, station_name, station_code, channels, data_type,
+                                overlap=True)
 
     # Denoise original stream object
     # Loop over each trace in original stream and apply denoising method
@@ -313,6 +340,15 @@ def denoise(date, model_filename, config_filename, channels, pathname_data, netw
 
     st_denoised.merge(method=1, fill_value=0)
     st_denoised.sort(keys=['channel'], reverse=True)
+
+    # Trim streams in case of overlapping segments from the day before to same start- and endtime as original data
+    st_orig_header = read_seismic_data(date, pathname_data, network, station_name, station_code, channels, data_type,
+                                       overlap=False, headonly=True)
+    for trace_denoised, trace_headonly in zip(st_denoised, st_orig_header):
+        if trace_denoised.stats.starttime != trace_headonly.stats.starttime:
+            trace_denoised.trim(starttime=trace_headonly.stats.starttime)
+        if trace_denoised.stats.endtime != trace_headonly.stats.endtime:
+            trace_denoised.trim(endtime=trace_headonly.stats.endtime)
 
     # Write each denoised trace into single mseed
     for i, denoised in enumerate(st_denoised):
@@ -406,6 +442,7 @@ def _auto_denoiser(date: obspy.UTCDateTime, model_filename: str, config_filename
     """
 
     # Read data for noisy and denoised stream
+    # TODO: Set overlap to True in read_seismic_data
     try:
         noisy_stream = read_seismic_data(date, sds_dir_noisy, network, station, station_code_noisy,
                                          channels, data_type)
@@ -491,6 +528,8 @@ def _auto_denoiser(date: obspy.UTCDateTime, model_filename: str, config_filename
                 trace.trim(starttime=endtime_denoised[i] + denoised.stats.delta)
 
         return denoised_stream, denoised_stream_cp, reclen
+    else:
+        return None, None, None
 
 
 def read_csv(filename: str, date=obspy.UTCDateTime(), **kwargs):
