@@ -441,7 +441,7 @@ def _auto_denoiser(date: obspy.UTCDateTime, model_filename: str, config_filename
     """
 
     # Read data for noisy and denoised stream
-    # TODO: Set overlap to True in read_seismic_data
+    # TODO: Set overlap to True in read_seismic_data (merging fails???)
     try:
         noisy_stream = read_seismic_data(date, sds_dir_noisy, network, station, station_code_noisy,
                                          channels, data_type)
@@ -499,21 +499,20 @@ def _auto_denoiser(date: obspy.UTCDateTime, model_filename: str, config_filename
         # Write each denoised trace into single mseed
         for i, denoised in enumerate(denoised_stream):
             # Make directories if they do not exist
-            full_pathname = "{}{:04d}/{}/{}/{}{}".format(sds_dir_denoised, date.year, network, station,
-                                                         denoised.stats.channel, data_type)
+            full_pathname = os.path.join(sds_dir_denoised, "{:04d}".format(date.year), network, station,
+                                         f"{denoised.stats.channel}{data_type}")
             if not os.path.exists(full_pathname):
                 os.makedirs(full_pathname)
 
-            filename = "{}{:04d}/{}/{}/{}{}/{}.{}.{}.{}.D.{:04d}.{:03d}".format(sds_dir_denoised, date.year, network,
-                                                                                station, denoised.stats.channel,
-                                                                                data_type,
-                                                                                denoised.stats.network,
-                                                                                denoised.stats.station,
-                                                                                denoised.stats.location,
-                                                                                denoised.stats.channel,
-                                                                                denoised.stats.starttime.year,
-                                                                                denoised.stats.starttime.julday
-                                                                                )
+            filename = os.path.join("{}{:04d}".format(sds_dir_denoised, date.year), network, station,
+                                    f"{denoised.stats.channel}{data_type}", "{}.{}.{}.{}.D.{:04d}.{:03d}".
+                                    format(denoised.stats.network,
+                                    denoised.stats.station,
+                                    denoised.stats.location,
+                                    denoised.stats.channel,
+                                    denoised.stats.starttime.year,
+                                    denoised.stats.starttime.julday)
+                                    )
 
             # Write full stream
             denoised.write(filename=filename,
