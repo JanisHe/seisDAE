@@ -14,11 +14,11 @@ Before starting, run the following command, please have the following packages i
  * Obspy 
  * Joblib
  * Pandas
+ * tqdm
  
 Otherwise run the following command in your conda environment:
 ```
-conda create -c conda-forge -n denoiser python=3.8 numpy=1.20 scipy=1.4.1 
-matplotlib obspy pandas joblib "tensorflow>=2.0"
+conda create -c conda-forge -n denoiser python=3.8 numpy=1.20 scipy=1.4.1 tqdm matplotlib obspy pandas joblib "tensorflow>=2.0"
 ```
 ```
 python setup.py install
@@ -53,7 +53,7 @@ For earthquake data, the STanford EArthquake Dataset (STEAD) is recommended (htt
 Note, each waveform is saved as a `.npz` file. If available, the earthquake data contain onsets of P- and S-arrivals 
 in samples (`itp` and `its`). Save your data e.g. by the folllowing commands for earthquakes and noise, repectively:
 ```
-np.savez(data=data=earthquake_data, file=filename, its=0, itp=0, starttime=str(trace.stats.starttime))
+np.savez(data=earthquake_data, file=filename, its=0, itp=0, starttime=str(trace.stats.starttime))
 np.savez(data=noise_data, file=filename)
 ```
 Afterwards, adjust the parfile and start your training.
@@ -69,12 +69,23 @@ information please have a closer look to the first mentioned paper). You can den
 the result to different filter methods by running the script `./denoiser_comparison/comparison.py`. Note, this
 repository does not include pre trained models as they need much memory.
 
-#### Denoise long seismograms
+#### Denoise seismograms
 If your seismogram is longer than your seismograms from the training dataset, the longer time series is split into
 overlapping segments, e.g. 60 s segments. Each of these segments is denoised and the overlapping segments are
 merged to get one denoises time series. 
-The script `./denoiser/denoiser_utils.py` contains the function 'denoising_stream' that removes the noise
+The script `./denoiser/denoiser_utils.py` contains the function `denoising_stream` that removes the noise
 from all traces in a obspy stream object. For more details please read the function description.
+You can use the pretrained model and config-file to suppress noise from your data. Try to run the following code:
+```
+from obspy import read, UTCDateTime
+from denoiser.denoise_utils import denoising_stream
+
+st = read(your data)  # Read your seismic data here
+st_de = st.copy()  # Create a copy of your obspy stream
+st_de = denoising_stream(stream=st, model_filename="Models/gr_mixed_stft.h5",
+                         config_filename="config/gr_mixed_stft.config")
+```
+Compare your original stream and the denoised stream whether some noise is removed from the data.
 
 #### Automatic denoiser
 In many cases one needs real time denoising to analyse the denoised traces e.g. with Seiscomp.

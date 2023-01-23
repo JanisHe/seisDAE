@@ -1,6 +1,5 @@
 ./pycwt/*
 *.log
-*.h5
 *.png
 *checkpoint
 *latest_checkpoint*

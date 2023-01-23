@@ -79,9 +79,9 @@ def read_seismic_data(date: obspy.UTCDateTime, sds_dir: str, network: str, stati
     # Read data
     stream = obspy.Stream()
     for channel in channels:
-        stream += obspy.read("{}/{:04d}/{}/{}/{}{}{}/*{:03d}".format(sds_dir, date.year, network, station,
-                                                                     station_code, channel, data_type,
-                                                                     date.julday), **kwargs)
+        stream += obspy.read(os.path.join(sds_dir, "{:04d}".format(date.year), network, station,
+                                          f"{station_code}{channel}{data_type}", "*{:03d}".format(date.julday)),
+                             **kwargs)
 
         # Try to read data from the day before and the next day to add some overlap for denoising
         if overlap is True:
@@ -89,9 +89,9 @@ def read_seismic_data(date: obspy.UTCDateTime, sds_dir: str, network: str, stati
             try:
                 day_before = date - 86400
                 stime = obspy.UTCDateTime(f"{day_before.date.isoformat()} 23:50")
-                stream += obspy.read("{}/{:04d}/{}/{}/{}{}{}/*{:03d}".format(sds_dir, day_before.year, network, station,
-                                                                             station_code, channel, data_type,
-                                                                             day_before.julday),
+                stream += obspy.read(os.path.join(sds_dir, "{:04d}".format(day_before.year), network, station,
+                                                  f"{station_code}{channel}{data_type}",
+                                                  "*{:03d}".format(day_before.julday)),
                                      starttime=stime)
             except Exception:
                 pass
@@ -100,9 +100,9 @@ def read_seismic_data(date: obspy.UTCDateTime, sds_dir: str, network: str, stati
             try:
                 day_after = date + 86400
                 etime = obspy.UTCDateTime(f"{day_after.date.isoformat()} 00:10")
-                stream += obspy.read("{}/{:04d}/{}/{}/{}{}{}/*{:03d}".format(sds_dir, day_after.year, network, station,
-                                                                             station_code, channel, data_type,
-                                                                             day_after.julday),
+                stream += obspy.read(os.path.join(sds_dir, "{:04d}".format(day_after.year), network, station,
+                                                  f"{station_code}{channel}{data_type}",
+                                                  "*{:03d}".format(day_after.julday)),
                                      endtime=etime)
             except Exception:
                 pass
@@ -308,7 +308,6 @@ def denoise(date, model_filename, config_filename, channels, pathname_data, netw
     :returns: None
     """
     # Read data for input date
-    # TODO: Add some overlapping to the day before if available and trim afterwards before writing denoised stream
     st_orig = read_seismic_data(date, pathname_data, network, station_name, station_code, channels, data_type,
                                 overlap=True)
 
@@ -353,21 +352,21 @@ def denoise(date, model_filename, config_filename, channels, pathname_data, netw
     # Write each denoised trace into single mseed
     for i, denoised in enumerate(st_denoised):
         # Make directories if they do not exist
-        full_pathname = "{}{:04d}/{}/{}/{}{}".format(pathname_denoised, date.year, network, station_name,
-                                                     denoised.stats.channel, data_type)
+        full_pathname = os.path.join(pathname_denoised, "{:04d}".format(date.year), network, station_name,
+                                     f"{denoised.stats.channel}{data_type}")
         if not os.path.exists(full_pathname):
             os.makedirs(full_pathname)
 
-        filename = "{}{:04d}/{}/{}/{}{}/{}.{}.{}.{}.D.{:04d}.{:03d}".format(pathname_denoised, date.year, network,
-                                                                            station_name, denoised.stats.channel,
-                                                                            data_type,
-                                                                            denoised.stats.network,
-                                                                            denoised.stats.station,
-                                                                            denoised.stats.location,
-                                                                            denoised.stats.channel,
-                                                                            denoised.stats.starttime.year,
-                                                                            denoised.stats.starttime.julday
-                                                                            )
+        filename = os.path.join("{}{:04d}".format(pathname_denoised, date.year), network, station_name,
+                                f"{denoised.stats.channel}{data_type}",
+                                "{}.{}.{}.{}.D.{:04d}.{:03d}".format(denoised.stats.network,
+                                                                     denoised.stats.station,
+                                                                     denoised.stats.location,
+                                                                     denoised.stats.channel,
+                                                                     denoised.stats.starttime.year,
+                                                                     denoised.stats.starttime.julday
+                                                                     )
+                                )
 
         # Write full stream
         print("Writing data to {}".format(filename))

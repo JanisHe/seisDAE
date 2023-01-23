@@ -397,10 +397,7 @@ class Model:
         plt.legend(['train', 'test'], loc='upper left')
 
         if plot is True:
-            if self.cwt is False:
-                plt.savefig("{}/{}_stft_accuracy.png".format(pathname, name))
-            elif self.cwt is True:
-                plt.savefig("{}/{}_cwt_accuracy.png".format(pathname, name))
+            plt.savefig("{}/{}_accuracy.png".format(pathname, name))
 
         # summarize history for loss
         fig_loss = plt.figure()
@@ -412,10 +409,7 @@ class Model:
         plt.legend(['train', 'test'], loc='upper left')
 
         if plot is True:
-            if self.cwt is False:
-                plt.savefig("{}/{}_stft_loss.png".format(pathname, name))
-            elif self.cwt is True:
-                plt.savefig("{}/{}_cwt_loss.png".format(pathname, name))
+            plt.savefig("{}/{}_loss.png".format(pathname, name))
 
         if plot is not True:
             return fig_acc, fig_loss
