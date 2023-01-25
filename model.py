@@ -466,7 +466,13 @@ class DataGenerator(Sequence):
             len_noise = 0
             while len_noise < self.ts_length:
                 noise_filename = "{}".format(self.noise_list[random.randint(0, len(self.noise_list) - 1)])
-                noise = np.load(noise_filename)
+                try:
+                    noise = np.load(noise_filename)
+                except ValueError:
+                    msg = f"Numpy cannot load {noise_filename}.\n" \
+                          f"The file seems to have an internal error."
+                    raise ValueError(msg)
+
                 len_noise = len(noise['data'])
                 # Check how many percent zeros contains the noise array
                 if np.count_nonzero(np.diff(noise['data'])) / len(noise['data']) < 0.95:

@@ -86,6 +86,9 @@ st_de = denoising_stream(stream=st, model_filename="Models/gr_mixed_stft.h5",
                          config_filename="config/gr_mixed_stft.config")
 ```
 Compare your original stream and the denoised stream whether some noise is removed from the data.
+The pretrained model is trained with noise samples from several stations of the seismic network GR and
+with high signal-to-ratio events from the Stanford Earthquake Dataset 
+(STEAD, https://github.com/smousavi05/STEAD).
 
 #### Automatic denoiser
 In many cases one needs real time denoising to analyse the denoised traces e.g. with Seiscomp.
