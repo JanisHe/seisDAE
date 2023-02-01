@@ -291,7 +291,10 @@ class Model:
         if isinstance(self.optimizer, str) is True:
             optimizer_name = self.optimizer
         else:
-            optimizer_name = self.optimizer._name
+            try:
+                optimizer_name = self.optimizer.name
+            except AttributeError:
+                optimizer_name = self.optimizer._name
             
         config_dict = dict(shape=self.shape, ts_length=self.ts_length, dt=self.dt_orig, channels=self.channels,
                            depth=self.depth, filter_root=self.filter_root, kernel_size=self.kernel_size,
