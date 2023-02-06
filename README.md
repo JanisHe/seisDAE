@@ -6,6 +6,9 @@ This package is based on the work by
  * Zhu, W.; Mousavi, S. M. & Beroza, G. C. Seismic signal denoising and decomposition using deep neural networks IEEE Transactions on Geoscience and Remote Sensing, IEEE, 2019, 57, 9476-9488
  * Tibi, R.; Hammond, P.; Brogan, R.; Young, C. J. & Koper, K. Deep Learning Denoising Applied to Regional Distance Seismic Data in Utah Bulletin of the Seismological Society of America, 2021 
 
+Moreover, the package `pycwt` is adapdted from https://github.com/regeirk/pycwt and modified.
+* Torrence, C. and Compo, G. P.. A Practical Guide to Wavelet Analysis. Bulletin of the American Meteorological Society, American Meteorological Society, 1998, 79, 61-78. 
+
 Before starting, run the following command, please have the following packages installed:
  * Numpy
  * Matplotlib

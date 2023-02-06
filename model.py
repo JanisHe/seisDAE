@@ -19,7 +19,7 @@ from tensorflow.keras.models import Model as TFmodel
 from tensorflow.keras.layers import Input, Conv2D, BatchNormalization, ReLU, Dropout, Conv2DTranspose, Cropping2D, \
     MaxPooling2D, UpSampling2D, Dense, Softmax, Flatten, Reshape, Add, LeakyReLU
 
-from pycwt import pycwt
+import pycwt
 from utils import save_obj
 
 

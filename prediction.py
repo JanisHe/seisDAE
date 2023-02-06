@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from tensorflow.keras.models import load_model
 from scipy.signal import stft, istft
 
-from pycwt import pycwt
+import pycwt
 from model import cwt_wrapper, Model, preprocessing
 from utils import load_obj
 
