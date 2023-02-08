@@ -32,5 +32,6 @@ patience = 30                           # Patience for early stopping callback
 verbose = 2                             # Verbosity for training [1-3]
 #############################################################################################################
 # Setup for GPU usage and multiprocessing
-workers = 16                            # Maximum number of processes to spin up when using process-based threading
-max_queue_size = 10                     # Maximum size for the generator queue. Default is 10
+# Note, maybe these values are not necessary and are removed in future
+workers = 1                            # Maximum number of processes to spin up when using process-based threading
+max_queue_size = 100                     # Maximum size for the generator queue. Default is 10
