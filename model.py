@@ -19,7 +19,7 @@ from tensorflow.keras.models import Model as TFmodel
 from tensorflow.keras.layers import Input, Conv2D, BatchNormalization, ReLU, Dropout, Conv2DTranspose, Cropping2D, \
     MaxPooling2D, UpSampling2D, Dense, Softmax, Flatten, Reshape, Add, LeakyReLU
 
-from pycwt import pycwt
+import pycwt
 from utils import save_obj
 
 
@@ -291,7 +291,10 @@ class Model:
         if isinstance(self.optimizer, str) is True:
             optimizer_name = self.optimizer
         else:
-            optimizer_name = self.optimizer._name
+            try:
+                optimizer_name = self.optimizer.name
+            except AttributeError:
+                optimizer_name = self.optimizer._name
             
         config_dict = dict(shape=self.shape, ts_length=self.ts_length, dt=self.dt_orig, channels=self.channels,
                            depth=self.depth, filter_root=self.filter_root, kernel_size=self.kernel_size,
@@ -466,7 +469,13 @@ class DataGenerator(Sequence):
             len_noise = 0
             while len_noise < self.ts_length:
                 noise_filename = "{}".format(self.noise_list[random.randint(0, len(self.noise_list) - 1)])
-                noise = np.load(noise_filename)
+                try:
+                    noise = np.load(noise_filename)
+                except ValueError:
+                    msg = f"Numpy cannot load {noise_filename}.\n" \
+                          f"The file seems to have an internal error."
+                    raise ValueError(msg)
+
                 len_noise = len(noise['data'])
                 # Check how many percent zeros contains the noise array
                 if np.count_nonzero(np.diff(noise['data'])) / len(noise['data']) < 0.95:

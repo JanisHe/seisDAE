@@ -6,6 +6,9 @@ This package is based on the work by
  * Zhu, W.; Mousavi, S. M. & Beroza, G. C. Seismic signal denoising and decomposition using deep neural networks IEEE Transactions on Geoscience and Remote Sensing, IEEE, 2019, 57, 9476-9488
  * Tibi, R.; Hammond, P.; Brogan, R.; Young, C. J. & Koper, K. Deep Learning Denoising Applied to Regional Distance Seismic Data in Utah Bulletin of the Seismological Society of America, 2021 
 
+Moreover, the package `pycwt` is adapdted from https://github.com/regeirk/pycwt and modified.
+* Torrence, C. and Compo, G. P.. A Practical Guide to Wavelet Analysis. Bulletin of the American Meteorological Society, American Meteorological Society, 1998, 79, 61-78. 
+
 Before starting, run the following command, please have the following packages installed:
  * Numpy
  * Matplotlib
@@ -86,6 +89,9 @@ st_de = denoising_stream(stream=st, model_filename="Models/gr_mixed_stft.h5",
                          config_filename="config/gr_mixed_stft.config")
 ```
 Compare your original stream and the denoised stream whether some noise is removed from the data.
+The pretrained model is trained with noise samples from several stations of the seismic network GR and
+with high signal-to-ratio events from the Stanford Earthquake Dataset 
+(STEAD, https://github.com/smousavi05/STEAD).
 
 #### Automatic denoiser
 In many cases one needs real time denoising to analyse the denoised traces e.g. with Seiscomp.

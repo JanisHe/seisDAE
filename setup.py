@@ -1,4 +1,3 @@
-import os
 from setuptools import setup
 
 AUTHORS = ('Janis Heuel'),
@@ -27,17 +26,6 @@ setup(
         'Intended Audience :: Science/Research'
     ],
 )
-
-
-# Clone package PyCWT from GitHub
-os.system("git clone https://github.com/regeirk/pycwt.git")
-
-# Run Setup file of PyCWT
-os.chdir('pycwt/')
-os.system('python setup.py install')
-# Create an empty file __init__.py in the pycwt directory, otherwise the package will not be recognised correctly.
-f_init = open("__init__.py", "w")
-f_init.close()
 
 print("\n" + "#" * 20)
 print("To train your first model run 'python run_model_from_parfile.py ./model_parfile' from the command line.")

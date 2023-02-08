@@ -7,7 +7,7 @@ Note, conda and pip install of pycwt do not work correctly. Install pycwt direct
 import copy
 import numpy as np
 from scipy import signal
-from pycwt import pycwt
+import pycwt
 
 
 def langston_mousavi(x, noise, dt=1.0,
