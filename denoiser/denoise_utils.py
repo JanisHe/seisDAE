@@ -3,7 +3,6 @@ import numpy as np
 import obspy
 import copy
 import asyncio
-from tqdm import tqdm
 import joblib
 import pandas as pd
 
@@ -159,7 +158,7 @@ def denoising_trace(trace, model_filename, config_filename, overlap=0.8, chunksi
     # Denoise data by prediction
     if chunksize is not None and chunksize >= 1:
         chunks = int(np.ceil(len(data_list) / chunksize))
-        for j in tqdm(range(chunks)):
+        for j in range(chunks):
             d = data_list[int(j*chunksize):int((j+1)*chunksize)]
             r, _, _ = predict(model_filename, config_filename, d, **kwargs)
             if j == 0:
