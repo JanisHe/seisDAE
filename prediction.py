@@ -115,9 +115,9 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
 
     # Denoise data by prediction with model
     if ckpt_model is True:
-        X_pred = model_dae.model.predict(X)
+        X_pred = model_dae.model.predict(X, verbose=0)
     else:
-        X_pred = model_dae.predict(X)
+        X_pred = model_dae.predict(X, verbose=0)
 
     # Loop over each element in predicted data and estimate denoised data
     for i in range(X_pred.shape[0]):
