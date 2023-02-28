@@ -23,11 +23,6 @@ Otherwise run the following command in your conda environment:
 ```
 conda create -c conda-forge -n denoiser python=3.8 numpy=1.20 scipy=1.4.1 tqdm matplotlib obspy pandas joblib "tensorflow>=2.0"
 ```
-```
-python setup.py install
-```
-There will be created a few new directories and the PyCWT packages is downloaded form GitHub,
-which is necessary for computation of CWT.
  
 After the installation of all packages, you can train the example by running
 
