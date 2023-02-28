@@ -119,7 +119,7 @@ def read_seismic_data(date: obspy.UTCDateTime, sds_dir: str, network: str, stati
     return stream
 
 
-def denoising_trace(trace, model_filename, config_filename, overlap=0.8, chunksize=None, **kwargs):
+def denoising_trace(trace, model_filename, config_filename, overlap=0.8, chunksize=None, verbose=True, **kwargs):
     """
     Denoising of an obspy Trace object using a trained Denoising Autoencoder.
 
@@ -226,11 +226,14 @@ def denoising_trace(trace, model_filename, config_filename, overlap=0.8, chunksi
                                                                                 network=trace.stats.network,
                                                                                 location=trace.stats.location,
                                                                                 channel=trace.stats.channel)))
+    if verbose:
+        print(f"Successfully denoised {trace.id} between {trace.stats.starttime} and {trace.stats.endtime}")
 
     return st_denoised[0], st_noise[0]
 
 
-def denoising_stream(stream, model_filename, config_filename, overlap=0.8, chunksize=None, parallel=False, **kwargs):
+def denoising_stream(stream, model_filename, config_filename, overlap=0.8, chunksize=None, parallel=False,
+                     verbose=True, **kwargs):
     """
     Denoises an obspy stream and returns the recovered signal and noise as two separate streams.
     Note, the parameters not mentioned in the description are given in denoising_trace.
@@ -264,7 +267,7 @@ def denoising_stream(stream, model_filename, config_filename, overlap=0.8, chunk
         # Run denoising for each trace in parallel
         pool = joblib.Parallel(n_jobs=n_jobs, backend="multiprocessing", prefer="processes")
         out = pool(joblib.delayed(denoising_trace)(trace=trace, model_filename=model_filename,
-                                                   config_filename=config_filename,
+                                                   config_filename=config_filename, verbose=verbose,
                                                    overlap=overlap, chunksize=chunksize, **kwargs) for trace in stream)
 
         # Sort streams from out in stream for recovered signal and noise
@@ -402,7 +405,7 @@ def check_endtime(stream1: obspy.Stream, stream2: obspy.Stream, channels="ZNE"):
 def _auto_denoiser(date: obspy.UTCDateTime, model_filename: str, config_filename: str,
                    sds_dir_noisy: str, sds_dir_denoised: str, network: str, station: str,
                    station_code_noisy="EH", station_code_denoised="EX", channels="ZNE",
-                   data_type="D", calib=1.0, **kwargs):
+                   data_type="D", calib=1.0, verbose=True, **kwargs):
     """
     Denoises an obspy stream for a given date and writes the denoised traces for each component to an SDS path.
 
@@ -478,7 +481,7 @@ def _auto_denoiser(date: obspy.UTCDateTime, model_filename: str, config_filename
 
         # Start denoising for each trace
         denoised, _ = denoising_stream(stream=noisy_stream, model_filename=model_filename,
-                                       config_filename=config_filename,
+                                       config_filename=config_filename, verbose=verbose,
                                        overlap=0.8, chunksize=600, parallel=True, **kwargs)
 
         for trace in denoised:
