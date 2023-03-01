@@ -353,20 +353,25 @@ def denoise(date, model_filename, config_filename, channels, pathname_data, netw
 
     # Write each denoised trace into single mseed
     for i, denoised in enumerate(st_denoised):
+        # Create julday and year
+        # Add a few seconds on starttime as for some samples the trace starts at the day before, i.e. 23:59:59.99999
+        tmp_date = denoised.stats.starttime + 30  # Add 30 seconds on starttime
+
         # Make directories if they do not exist
         full_pathname = os.path.join(pathname_denoised, "{:04d}".format(date.year), network, station_name,
                                      f"{denoised.stats.channel}{data_type}")
         if not os.path.exists(full_pathname):
             os.makedirs(full_pathname)
 
-        filename = os.path.join("{}{:04d}".format(pathname_denoised, date.year), network, station_name,
+        # Create filename for the denoised data
+        filename = os.path.join("{}{:04d}".format(pathname_denoised, tmp_date.year), network, station_name,
                                 f"{denoised.stats.channel}{data_type}",
                                 "{}.{}.{}.{}.D.{:04d}.{:03d}".format(denoised.stats.network,
                                                                      denoised.stats.station,
                                                                      denoised.stats.location,
                                                                      denoised.stats.channel,
-                                                                     denoised.stats.starttime.year,
-                                                                     denoised.stats.starttime.julday
+                                                                     tmp_date.year,
+                                                                     tmp_date.julday
                                                                      )
                                 )
 
