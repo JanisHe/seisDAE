@@ -357,9 +357,9 @@ def denoise(date, model_filename, config_filename, channels, pathname_data, netw
         # Add a few seconds on starttime as for some samples the trace starts at the day before, i.e. 23:59:59.99999
         tmp_date = denoised.stats.starttime + 30  # Add 30 seconds on starttime
 
-        # Make directories if they do not exist
+        # Create directories if they do not exist
         full_pathname = os.path.join(pathname_denoised, "{:04d}".format(date.year), network, station_name,
-                                     f"{denoised.stats.channel}{data_type}")
+                                     f"{denoised.stats.channel}.{data_type}")
         if not os.path.exists(full_pathname):
             os.makedirs(full_pathname)
 
