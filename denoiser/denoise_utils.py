@@ -5,6 +5,7 @@ import copy
 import asyncio
 import joblib
 import pandas as pd
+from pathlib import Path
 
 from prediction import predict
 from utils import load_obj
@@ -118,7 +119,8 @@ def read_seismic_data(date: obspy.UTCDateTime, sds_dir: str, network: str, stati
     return stream
 
 
-def denoising_trace(trace, model_filename, config_filename, overlap=0.8, chunksize=None, verbose=True, **kwargs):
+def denoising_trace(trace, model_filename=None, config_filename=None, overlap=0.8, chunksize=None, verbose=True,
+                    **kwargs):
     """
     Denoising of an obspy Trace object using a trained Denoising Autoencoder.
 
@@ -131,6 +133,10 @@ def denoising_trace(trace, model_filename, config_filename, overlap=0.8, chunksi
 
     :returns: denoised trace, noisy trace
     """
+    # Read default model and config file
+    if not model_filename or not config_filename:
+        model_filename = Path(__file__).parent.parent / "Models" / "gr_mixed_stft.h5"
+        config_filename = Path(__file__).parent.parent / "config" / "gr_mixed_stft.config"
 
     # Load config file
     config = load_obj(config_filename)
@@ -231,8 +237,9 @@ def denoising_trace(trace, model_filename, config_filename, overlap=0.8, chunksi
     return st_denoised[0], st_noise[0]
 
 
-def denoising_stream(stream, model_filename, config_filename, overlap=0.8, chunksize=None, parallel=False,
+def denoising_stream(stream, model_filename=None, config_filename=None, overlap=0.8, chunksize=None, parallel=False,
                      verbose=True, **kwargs):
+    # TODO: Add pretrained model as model_filename and config_filename (Problem: absolute vs. realtive path)
     """
     Denoises an obspy stream and returns the recovered signal and noise as two separate streams.
     Note, the parameters not mentioned in the description are given in denoising_trace.
