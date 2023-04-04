@@ -127,12 +127,17 @@ def denoising_trace(trace, model_filename=None, config_filename=None, overlap=0.
     :param trace: obspy Trace
     :param model_filename: filename of the trained denoising model
     :param config_filename: filename of the config file for the denoising model
-    :param overlap: overlap between neighbouring elements in trace [0, 1]
+    :param overlap: overlap between neighbouring elements in trace [0, 1[
     :param chunksize: int, for denosing of large traces, a trace is splitted into parts of chunksize, otherwise
                       the data might not fit into memory. In particular it is necessary when CWT is used.
 
     :returns: denoised trace, noisy trace
     """
+    # Check value for overlap
+    if overlap < 0 or overlap >= 1:
+        msg = f"Value overlap is not in range [0, 1[. You set it to {overlap}."
+        raise ValueError(msg)
+
     # Read default model and config file
     if not model_filename or not config_filename:
         model_filename = Path(__file__).parent.parent / "Models" / "gr_mixed_stft.h5"
