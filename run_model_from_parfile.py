@@ -34,6 +34,14 @@ def main(parfile):
     except KeyError:
         pass
 
+    # Check whether signal and noise files are not empty
+    if len(signal_files) == 0:
+        msg = f"Found no .npz for signal in path {parameters['signal_pathname']}."
+        raise ValueError(msg)
+    if len(noise_files) == 0:
+        msg = f"Found no .npz for noise in path {parameters['noise_pathname']}."
+        raise ValueError(msg)
+
     # Create callbacks
     # import tensorflow as tf   # Importing tensorflow earlier leads to running script on more than one GPU
     callbacks = [tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=parameters['patience'], verbose=1),

@@ -23,6 +23,8 @@ import pycwt
 from utils import save_obj
 
 
+# TODO: Use os.path.join instead of absolute paths
+
 def cwt_wrapper(x, dt=1.0, yshape=150, **kwargs):
 
     # Remove mean from x
@@ -440,7 +442,7 @@ class DataGenerator(Sequence):
             raise ValueError(msg)
 
         if len(self.signal_list) == 0:
-            msg = "Could not load noise files from {}".format(self.signal_list)
+            msg = "Could not load signal files from {}".format(self.signal_list)
             raise ValueError(msg)
 
     def __len__(self):
@@ -501,9 +503,10 @@ class DataGenerator(Sequence):
 
                 # epsilon = 0  # Avoiding zeros in added arrays
                 # shift1 = np.random.uniform(low=-1, high=1, size=int(self.ts_length - s_samp)) * epsilon
+                # TODO: Check data augmentation if correct
                 if p_samp and s_samp:
                     if int(self.ts_length - s_samp) < 0:
-                        shift1 = np.zeros(0)
+                        shift1 = np.zeros(0) 
                     else:
                         shift1 = np.zeros(shape=int(self.ts_length - s_samp))
                     signal = np.concatenate((shift1, signal))
