@@ -110,14 +110,18 @@ def rms(x):
     return np.sqrt(np.sum(x ** 2) / x.shape[0])
 
 
-def signal_to_noise_ratio(signal, noise):
+def signal_to_noise_ratio(signal, noise, decibel=True):
     """
     SNR in dB
     :param signal:
     :param noise:
+    :param decibel:
     :return:
     """
-    return 20 * np.log10(rms(signal) / rms(noise))
+    if decibel is True:
+        return 20 * np.log10(rms(signal) / rms(noise))
+    else:
+        return rms(signal) / rms(noise)
 
 
 if __name__ == "__main__":
