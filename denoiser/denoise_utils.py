@@ -236,7 +236,7 @@ def denoising_trace(trace, model_filename=None, config_filename=None, overlap=0.
                                                                                 network=trace.stats.network,
                                                                                 location=trace.stats.location,
                                                                                 channel=trace.stats.channel)))
-    if verbose:
+    if verbose is True:
         print(f"Successfully denoised {trace.id} between {trace.stats.starttime} and {trace.stats.endtime}")
 
     return st_denoised[0], st_noise[0]
@@ -289,7 +289,7 @@ def denoising_stream(stream, model_filename=None, config_filename=None, overlap=
         # Loop over each trace in stream and start denoising
         for trace in stream:
             tr_signal, tr_noise = denoising_trace(trace=trace, model_filename=model_filename,
-                                                   config_filename=config_filename,
+                                                   config_filename=config_filename, verbose=verbose,
                                                    overlap=overlap, chunksize=chunksize, **kwargs)
             st_rec_signal += tr_signal
             st_rec_noise += tr_noise
