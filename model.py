@@ -344,7 +344,7 @@ class Model:
     def train_model_generator(self, signal_file, noise_file,
                               epochs=50, batch_size=20, validation_split=0.15, verbose=1,
                               workers=8, use_multiprocessing=True, max_queue_size=10):
-
+        # TODO: Shuffle signal files here and read with glob as done for noise!
         # Save config file in config directory as tmp.config
         filename_tmp_config = "{}_{}_tmp".format(self.now_str, "stft" if self.cwt is False else "cwt")
         self.save_config(pathname="./config", filename=filename_tmp_config)
@@ -535,7 +535,13 @@ class DataGenerator(Sequence):
 
             # Normalize Noise and signal by each max. absolute value
             # Since noise and signal do not have same amplitude range, each trace is normalized by itself
-            noise = noise / np.max(np.abs(noise))
+            if np.max(np.abs(signal)) <= 1e-15:
+                msg = "Your signal files contains an array only with zeros.\nThis is not valid! Please delete this " \
+                      "array from your data set."
+                raise ValueError(msg)
+
+            if np.max(np.abs(noise)) > 0:
+                noise = noise / np.max(np.abs(noise))
             signal = signal / np.max(np.abs(signal))
 
             # Adding signal and noise
