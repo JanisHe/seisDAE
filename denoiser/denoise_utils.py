@@ -376,8 +376,8 @@ def denoise(date, model_filename, config_filename, channels, pathname_data, netw
             os.makedirs(full_pathname)
 
         # Create filename for the denoised data
-        filename = os.path.join("{}{:04d}".format(pathname_denoised, tmp_date.year), network, station_name,
-                                f"{denoised.stats.channel}{data_type}",
+        filename = os.path.join("{}{:04d}".format(pathname_denoised, date.year), network, station_name,
+                                f"{denoised.stats.channel}.{data_type}",
                                 "{}.{}.{}.{}.D.{:04d}.{:03d}".format(denoised.stats.network,
                                                                      denoised.stats.station,
                                                                      denoised.stats.location,
