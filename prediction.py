@@ -54,7 +54,12 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
         input_shape = model_dae.shape
     else:
         # Read fully trained model
-        model_dae = load_model(model_filename)
+        try:
+            model_dae = load_model(model_filename)
+        except ValueError:
+            model_dae = load_model(model_filename, compile=False)   # Do not recompile the model
+                                                                    # In some cases, tensorflow versions have problems
+                                                                    # with loading models from newer versions.
         input_shape = (model_dae.input_shape[1], model_dae.input_shape[2])
 
     # Allocate empty arrays for data
