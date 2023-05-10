@@ -76,6 +76,12 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
 
     # Loop over each data array in data_list, transform data and write into new array which is used for prediction
     for i, array in enumerate(data_list):
+        # Check size of signal and compare with input shape for prediction
+        if len(array) < config['ts_length']:
+            msg = f"The shape of your input signal is not correct. {config['ts_length']} samples are required " \
+                  f"instead of {len(array)}."
+            raise ValueError(msg)
+
         signal_tmp = array[:config['ts_length']]
 
         signal, dt = preprocessing(data=signal_tmp, dt=config['dt'],
@@ -117,6 +123,11 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
         else:
             msg = "Channel number cannot exceed 2."
             raise ValueError(msg)
+
+    # Check whether data are available
+    if X.shape[0] == 0:
+        msg = "There are no data available for prediction."
+        raise ValueError(msg)
 
     # Denoise data by prediction with model
     if ckpt_model is True:
