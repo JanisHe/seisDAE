@@ -3,6 +3,7 @@ import os
 import shutil
 import glob
 import warnings
+import random
 
 import tensorflow as tf
 
@@ -28,6 +29,7 @@ def main(parfile):
 
     # Setup for signal and noise files
     signal_files = glob.glob(parameters['signal_pathname'])
+    random.shuffle(signal_files)                               # Shuffle signal files
     noise_files = parameters['noise_pathname']
     try:
         signal_files = signal_files[:int(parameters['num_signals'])]

@@ -97,7 +97,6 @@ def cropping_layer(needed_shape, is_shape):
     return shape1, shape2
 
 
-
 class Model:
 
     def __init__(self, ts_length=6001, dt=1.0, optimizer="adam",
