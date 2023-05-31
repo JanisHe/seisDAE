@@ -269,7 +269,6 @@ class Model:
         self.model = TFmodel(input_layer, h)
         self.model.compile(optimizer=self.optimizer, loss=self.loss, metrics=['accuracy'])
 
-
     def summarize(self):
         self.model.summary()
 
@@ -345,7 +344,8 @@ class Model:
                               workers=8, use_multiprocessing=True, max_queue_size=10):
         # TODO: Shuffle signal files here and read with glob as done for noise!
         # Save config file in config directory as tmp.config
-        filename_tmp_config = "{}_{}_tmp".format(self.now_str, "stft" if self.cwt is False else "cwt")
+        randint = random.randint(0, 9999)
+        filename_tmp_config = "{}_{}_tmp_{:04d}".format(self.now_str, "stft" if self.cwt is False else "cwt", randint)
         self.save_config(pathname="./config", filename=filename_tmp_config)
 
         # Split value to split data into training and validation datasets
