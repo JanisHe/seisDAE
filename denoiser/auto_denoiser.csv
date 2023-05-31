@@ -24,10 +24,13 @@
 # config: Full pathname of the config file for the DAE
 # calib: Denoised data are multiplied by calib to avoid last bits in written data. Default is 1, but sometimes 100
 #        is recommended.
+#
+# Optional parameters:
+# location: Name of the location
 ########################################################################################################################
 # Note, if more parameters are needed or a different order of the parameters, please add them and change the order,
 # as the file is read by pandas and only needs the required parameters as keywords.
 # Add comments by adding "#" as a first element in your new line.
 # Empty entries are allowed and are set by no whitespace between commas.
 ########################################################################################################################
-network,station,channel_code,channel_direction,type,sdsdir,dae_model,config,channel_code_denoised,sds_out,calib
+network,station,location,channel_code,channel_direction,type,sdsdir,dae_model,config,channel_code_denoised,sds_out,calib

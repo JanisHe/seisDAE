@@ -6,6 +6,7 @@ import random
 import obspy
 
 import numpy as np
+import tensorflow as tf
 import matplotlib.pyplot as plt
 from tensorflow.keras.models import load_model
 from scipy.signal import stft, istft
@@ -134,6 +135,9 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
         X_pred = model_dae.model.predict(X, verbose=0)
     else:
         X_pred = model_dae.predict(X, verbose=0)
+
+    # Clear keras session to limit memory usage
+    tf.keras.backend.clear_session()
 
     # Loop over each element in predicted data and estimate denoised data
     for i in range(X_pred.shape[0]):

@@ -124,6 +124,10 @@ def signal_to_noise_ratio(signal, noise, decibel=True):
         return rms(signal) / rms(noise)
 
 
+def is_nan(num):
+    return num != num
+
+
 if __name__ == "__main__":
     para = readtxt("model_parfile")
     print()

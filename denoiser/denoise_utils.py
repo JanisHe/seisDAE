@@ -8,7 +8,7 @@ import pandas as pd
 from pathlib import Path
 
 from prediction import predict
-from utils import load_obj
+from utils import load_obj, is_nan
 
 
 async def merge_traces(stream: obspy.Stream, header: dict):
@@ -46,7 +46,7 @@ async def merge_traces(stream: obspy.Stream, header: dict):
     return stream_out
 
 
-def read_seismic_data(date: obspy.UTCDateTime, sds_dir: str, network: str, station: str,
+def read_seismic_data(date: obspy.UTCDateTime, sds_dir: str, network: str, station: str, location="*",
                       station_code="EH", channels="ZNE", data_type="D", overlap=False, **kwargs):
     """
     Reads seismic data from SDS structure for a certain date.
@@ -56,6 +56,7 @@ def read_seismic_data(date: obspy.UTCDateTime, sds_dir: str, network: str, stati
     :param sds_dir: Pathname for SDS directory
     :param network: Name of seismic network
     :param station: Name of seismic station
+    :param location: Name of location, default value is *
     :param station_code: Name of the station code, e.g. EH, HH or BH
     :param channels: Name of channels, e.g. ZNE or Z12
     :param data_type: 1 characters indicating the data type, recommended types are:
@@ -80,7 +81,8 @@ def read_seismic_data(date: obspy.UTCDateTime, sds_dir: str, network: str, stati
     stream = obspy.Stream()
     for channel in channels:
         stream += obspy.read(os.path.join(sds_dir, "{:04d}".format(date.year), network, station,
-                                          f"{station_code}{channel}{data_type}", "*{:03d}".format(date.julday)),
+                                          f"{station_code}{channel}{data_type}", "{}*{:03d}".format(location,
+                                                                                                    date.julday)),
                              **kwargs)
 
         # Try to read data from the day before and the next day to add some overlap for denoising
@@ -91,7 +93,7 @@ def read_seismic_data(date: obspy.UTCDateTime, sds_dir: str, network: str, stati
                 stime = obspy.UTCDateTime(f"{day_before.date.isoformat()} 23:50")
                 stream += obspy.read(os.path.join(sds_dir, "{:04d}".format(day_before.year), network, station,
                                                   f"{station_code}{channel}{data_type}",
-                                                  "*{:03d}".format(day_before.julday)),
+                                                  "{}*{:03d}".format(location, day_before.julday)),
                                      starttime=stime)
             except Exception:
                 pass
@@ -102,7 +104,7 @@ def read_seismic_data(date: obspy.UTCDateTime, sds_dir: str, network: str, stati
                 etime = obspy.UTCDateTime(f"{day_after.date.isoformat()} 00:10")
                 stream += obspy.read(os.path.join(sds_dir, "{:04d}".format(day_after.year), network, station,
                                                   f"{station_code}{channel}{data_type}",
-                                                  "*{:03d}".format(day_after.julday)),
+                                                  "{}*{:03d}".format(location, day_after.julday)),
                                      endtime=etime)
             except Exception:
                 pass
@@ -313,7 +315,7 @@ def denoise(date, model_filename, config_filename, channels, pathname_data, netw
     :param station_code: Station code of the station, e.g. EH or HH
     :param pathname_denoised: Full pathname for the denoised data
     :param station_code_denoised: Station code for the denoised data, e.g. EH or SX
-    :param calib: Calibration factor for the denoised data. The denoised data are mutilplied with the calib factor to
+    :param calib: Calibration factor for the denoised data. The denoised data are multiplied with the calib factor to
                   avoid last bits in the denoised data. Default is 1.0
     :param noise: If True the recovered noise the saved, otherwise the recovered signal is saved. Default is False
     :param data_type: Data type of the input data, e.g. D. For more information see Seed manual. Default is an empty
@@ -355,6 +357,7 @@ def denoise(date, model_filename, config_filename, channels, pathname_data, netw
     st_denoised.sort(keys=['channel'], reverse=True)
 
     # Trim streams in case of overlapping segments from the day before to same start- and endtime as original data
+    # TODO: headonly=True does not always work (e.g. ZB.C22 data). Test whether st_orig_header is empty otherwise read full data
     st_orig_header = read_seismic_data(date, pathname_data, network, station_name, station_code, channels, data_type,
                                        overlap=False, headonly=True)
     for trace_denoised, trace_headonly in zip(st_denoised, st_orig_header):
@@ -417,10 +420,10 @@ def check_endtime(stream1: obspy.Stream, stream2: obspy.Stream, channels="ZNE"):
     return same_endtime
 
 
-def _auto_denoiser(date: obspy.UTCDateTime, model_filename: str, config_filename: str,
-                   sds_dir_noisy: str, sds_dir_denoised: str, network: str, station: str,
-                   station_code_noisy="EH", station_code_denoised="EX", channels="ZNE",
-                   data_type="D", calib=1.0, verbose=True, **kwargs):
+def __auto_denoiser(date: obspy.UTCDateTime, model_filename: str, config_filename: str,
+                    sds_dir_noisy: str, sds_dir_denoised: str, network: str, station: str,
+                    location="*", station_code_noisy="EH", station_code_denoised="EX", channels="ZNE",
+                    data_type="D", calib=1.0, verbose=True, **kwargs):
     """
     Denoises an obspy stream for a given date and writes the denoised traces for each component to an SDS path.
 
@@ -431,6 +434,7 @@ def _auto_denoiser(date: obspy.UTCDateTime, model_filename: str, config_filename
     :param sds_dir_denoised: Base directory of the SDS to write denoised data
     :param network: Name of the network
     :param station: Name of the station
+    :param location: Name of location, default value is *
     :param station_code_noisy: Station code of the noisy data, e.g. EH, HH or BH
     :param station_code_denoised: Station code of the denoised data, e.g. EX, HX or SX
     :param channels: Channels of the input data, e.g. ZNE or Z12
@@ -461,15 +465,16 @@ def _auto_denoiser(date: obspy.UTCDateTime, model_filename: str, config_filename
     # Read data for noisy and denoised stream
     # TODO: Set overlap to True in read_seismic_data (merging fails???)
     try:
-        noisy_stream = read_seismic_data(date, sds_dir_noisy, network, station, station_code_noisy,
-                                         channels, data_type)
+        noisy_stream = read_seismic_data(date, sds_dir_noisy, network, station, station_code=station_code_noisy,
+                                         channels=channels, data_type=data_type, location=location)
     except Exception as e:
         print(e)
         return None, None, None
 
     try:
-        denoised_stream = read_seismic_data(date, sds_dir_denoised, network, station, station_code_denoised,
-                                            channels, data_type)
+        denoised_stream = read_seismic_data(date, sds_dir_denoised, network, station,
+                                            station_code=station_code_denoised, channels=channels,
+                                            data_type=data_type, location=location)
     except Exception:
         denoised_stream = obspy.Stream()
 
@@ -568,6 +573,14 @@ def read_csv(filename: str, date=obspy.UTCDateTime(), **kwargs):
         else:
             data_type = df_csv['type'][i]
 
+        # Add location to dataframe if it is available in csv file, otherwise use *
+        try:
+            location = df_csv['location'][i]
+            if is_nan(location):
+                location = "*"
+        except KeyError:
+            location = "*"
+
         # Update dict
         df_dict.update({"{}.{}".format(network, station): dict(date=date,
                                                                model_filename=df_csv['dae_model'][i],
@@ -576,6 +589,7 @@ def read_csv(filename: str, date=obspy.UTCDateTime(), **kwargs):
                                                                sds_dir_denoised=df_csv['sds_out'][i],
                                                                network=df_csv['network'][i],
                                                                station=df_csv['station'][i],
+                                                               location=location,
                                                                station_code_noisy=df_csv['channel_code'][i],
                                                                station_code_denoised=df_csv['channel_code_denoised'][i],
                                                                channels=df_csv['channel_direction'][i],
@@ -608,6 +622,6 @@ def auto_denoiser(csv_file: str, date: obspy.UTCDateTime, n_cores=1):
 
     # Start auto denoiser for each station in auto_denoiser_dict
     pool = joblib.Parallel(n_jobs=n_cores, backend="multiprocessing", prefer="processes")
-    out = pool(joblib.delayed(_auto_denoiser)(**auto_denoiser_dict[item]) for item in auto_denoiser_dict)
+    out = pool(joblib.delayed(__auto_denoiser)(**auto_denoiser_dict[item]) for item in auto_denoiser_dict)
 
     return out
