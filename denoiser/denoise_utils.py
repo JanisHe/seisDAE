@@ -324,7 +324,8 @@ def denoise(date, model_filename, config_filename, channels, pathname_data, netw
     :returns: None
     """
     # Read data for input date
-    st_orig = read_seismic_data(date, pathname_data, network, station_name, station_code, channels, data_type,
+    st_orig = read_seismic_data(date=date, sds_dir=pathname_data, network=network, station=station_name,
+                                station_code=station_code, channels=channels, data_type=data_type,
                                 overlap=True)
 
     # Denoise original stream object
@@ -358,7 +359,8 @@ def denoise(date, model_filename, config_filename, channels, pathname_data, netw
 
     # Trim streams in case of overlapping segments from the day before to same start- and endtime as original data
     # TODO: headonly=True does not always work (e.g. ZB.C22 data). Test whether st_orig_header is empty otherwise read full data
-    st_orig_header = read_seismic_data(date, pathname_data, network, station_name, station_code, channels, data_type,
+    st_orig_header = read_seismic_data(date=date, sds_dir=pathname_data, network=network, station=station_name,
+                                       station_code=station_code, channels=channels, data_type=data_type,
                                        overlap=False, headonly=True)
     for trace_denoised, trace_headonly in zip(st_denoised, st_orig_header):
         if trace_denoised.stats.starttime != trace_headonly.stats.starttime:
@@ -465,14 +467,15 @@ def __auto_denoiser(date: obspy.UTCDateTime, model_filename: str, config_filenam
     # Read data for noisy and denoised stream
     # TODO: Set overlap to True in read_seismic_data (merging fails???)
     try:
-        noisy_stream = read_seismic_data(date, sds_dir_noisy, network, station, station_code=station_code_noisy,
+        noisy_stream = read_seismic_data(date=date, sds_dir=sds_dir_noisy, network=network, station=station,
+                                         station_code=station_code_noisy,
                                          channels=channels, data_type=data_type, location=location)
     except Exception as e:
         print(e)
         return None, None, None
 
     try:
-        denoised_stream = read_seismic_data(date, sds_dir_denoised, network, station,
+        denoised_stream = read_seismic_data(date=date, sds_dir=sds_dir_denoised, network=network, station=station,
                                             station_code=station_code_denoised, channels=channels,
                                             data_type=data_type, location=location)
     except Exception:
