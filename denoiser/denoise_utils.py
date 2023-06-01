@@ -81,7 +81,7 @@ def read_seismic_data(date: obspy.UTCDateTime, sds_dir: str, network: str, stati
     stream = obspy.Stream()
     for channel in channels:
         stream += obspy.read(os.path.join(sds_dir, "{:04d}".format(date.year), network, station,
-                                          f"{station_code}{channel}{data_type}", "{}*{:03d}".format(location,
+                                          f"{station_code}{channel}{data_type}", "*{}*{:03d}".format(location,
                                                                                                     date.julday)),
                              **kwargs)
 
@@ -93,7 +93,7 @@ def read_seismic_data(date: obspy.UTCDateTime, sds_dir: str, network: str, stati
                 stime = obspy.UTCDateTime(f"{day_before.date.isoformat()} 23:50")
                 stream += obspy.read(os.path.join(sds_dir, "{:04d}".format(day_before.year), network, station,
                                                   f"{station_code}{channel}{data_type}",
-                                                  "{}*{:03d}".format(location, day_before.julday)),
+                                                  "*{}*{:03d}".format(location, day_before.julday)),
                                      starttime=stime)
             except Exception:
                 pass
@@ -104,7 +104,7 @@ def read_seismic_data(date: obspy.UTCDateTime, sds_dir: str, network: str, stati
                 etime = obspy.UTCDateTime(f"{day_after.date.isoformat()} 00:10")
                 stream += obspy.read(os.path.join(sds_dir, "{:04d}".format(day_after.year), network, station,
                                                   f"{station_code}{channel}{data_type}",
-                                                  "{}*{:03d}".format(location, day_after.julday)),
+                                                  "*{}*{:03d}".format(location, day_after.julday)),
                                      endtime=etime)
             except Exception:
                 pass
@@ -581,6 +581,8 @@ def read_csv(filename: str, date=obspy.UTCDateTime(), **kwargs):
             location = df_csv['location'][i]
             if is_nan(location):
                 location = "*"
+            if isinstance(location, float):                               # Convert location to two digit string
+                location = "{:02d}".format(int(location))
         except KeyError:
             location = "*"
 
