@@ -362,6 +362,15 @@ def denoise(date, model_filename, config_filename, channels, pathname_data, netw
     st_orig_header = read_seismic_data(date=date, sds_dir=pathname_data, network=network, station=station_name,
                                        station_code=station_code, channels=channels, data_type=data_type,
                                        overlap=False, headonly=True)
+
+    # In a few cases, st_orig_header is empty. For these cases, the stream is read including the data, i.e.
+    # headonly=False
+    if len(st_orig_header) == 0:
+        st_orig_header = read_seismic_data(date=date, sds_dir=pathname_data, network=network, station=station_name,
+                                           station_code=station_code, channels=channels, data_type=data_type,
+                                           overlap=False)
+
+    # Get start and endtimes
     for trace_denoised, trace_headonly in zip(st_denoised, st_orig_header):
         if trace_denoised.stats.starttime != trace_headonly.stats.starttime:
             trace_denoised.trim(starttime=trace_headonly.stats.starttime)
