@@ -1,4 +1,4 @@
-# Denoising Autoencoder for seismic data
+# Denoising Autoencoder for seismological data
 
 This packages contains python scripts to train a neural network for the denoising of seismological data.
 This package is based on the work by 
