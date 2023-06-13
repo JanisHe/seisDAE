@@ -30,3 +30,6 @@ batch_size = 32                         # Batch size
 patience = 30                           # Patience for early stopping callback
 verbose = 2                             # Verbosity for training [1-3]
 #############################################################################################################
+# Setup for multiprocessing
+workers = 2                             # Maximum number of processes to spin up when using process-based threading
+max_queue_size = 10                     # Maximum size for the generator queue. Default is 10

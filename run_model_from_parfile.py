@@ -116,11 +116,12 @@ def main(parfile):
     except KeyError:
         verbose = 1
 
+    # Using more than one worker increases the speed for training but also requires more memory
     try:
         workers = int(parameters['workers'])
     except KeyError:
-        #warnings.warn("Set number of workers to 1. Otherwise specify in parameter file!")
-        workers = int(os.cpu_count() / 2)
+        warnings.warn("Set number of workers to 1. Otherwise specify in parameter file!")
+        workers = 1
 
     if workers > 1:
         use_multiprocessing = True
@@ -130,7 +131,7 @@ def main(parfile):
     try:
         max_queue_size = int(parameters['max_queue_size'])
     except KeyError:
-        max_queue_size = 10
+        max_queue_size = 1
 
     # 2. Create Model
     m = Model(ts_length=int(parameters['ts_length']), use_bias=False, activation=None, drop_rate=drop_rate,
