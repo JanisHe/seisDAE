@@ -119,8 +119,8 @@ def main(parfile):
     try:
         workers = int(parameters['workers'])
     except KeyError:
-        warnings.warn("Set number of workers to 1. Otherwise specify in parameter file!")
-        workers = 1
+        #warnings.warn("Set number of workers to 1. Otherwise specify in parameter file!")
+        workers = int(os.cpu_count() / 2)
 
     if workers > 1:
         use_multiprocessing = True
