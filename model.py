@@ -16,11 +16,12 @@ from datetime import datetime
 from scipy.signal import stft, istft
 from tensorflow.keras.utils import Sequence
 from tensorflow.keras.models import Model as TFmodel
+from tensorflow.keras.models import load_model
 from tensorflow.keras.layers import Input, Conv2D, BatchNormalization, ReLU, Dropout, Conv2DTranspose, Cropping2D, \
     MaxPooling2D, UpSampling2D, Dense, Softmax, Flatten, Reshape, Add, LeakyReLU
 
 import pycwt
-from utils import save_obj
+from utils import save_obj, load_obj
 
 
 # TODO: Use os.path.join instead of absolute paths
@@ -100,7 +101,7 @@ def cropping_layer(needed_shape, is_shape):
 class Model:
 
     def __init__(self, ts_length=6001, dt=1.0, optimizer="adam",
-                 loss='mean_absolute_error', activation=None, drop_rate=0.1,
+                 loss='binary_crossentropy', activation=None, drop_rate=0.1,
                  use_bias=False, data_augmentation=True, shuffle=True, channels=2, decimation_factor=2, cwt=True,
                  callbacks=None, **kwargs):
 
@@ -321,11 +322,12 @@ class Model:
         self.save_config(pathname=pathname_config, filename=filename)
         # Save fully trained model
         #  If checkpoints are available, the model is saved from the latest checkpoint to prevent overfitting
-        for callback_index, callback_val in enumerate(self.callbacks):
-            if type(callback_val) == tf.keras.callbacks.ModelCheckpoint:
-                self.model.load_weights(self.callbacks[callback_index].filepath)
-                print("Model is saved from latest checkpoints.")
-                break
+        if self.callbacks:
+            for callback_index, callback_val in enumerate(self.callbacks):
+                if type(callback_val) == tf.keras.callbacks.ModelCheckpoint:
+                    self.model.load_weights(self.callbacks[callback_index].filepath)
+                    print("Model is saved from latest checkpoints.")
+                    break
 
         if filename:
             self.model.save("{}/{}.h5".format(pathname_model, filename), overwrite=True)
@@ -340,7 +342,7 @@ class Model:
 
 
     def train_model_generator(self, signal_file, noise_file,
-                              epochs=50, batch_size=20, validation_split=0.15, verbose=1,
+                              epochs=50, batch_size=32, validation_split=0.2, verbose=1,
                               workers=8, use_multiprocessing=True, max_queue_size=10):
         # TODO: Shuffle signal files here and read with glob as done for noise!
         # Save config file in config directory as tmp.config
@@ -587,3 +589,47 @@ class DataGenerator(Sequence):
                 raise ValueError(msg)
 
         return X, Y
+
+
+def retrain(model_filename, config_filename, signal_pathname="./example_data/signal/*",
+            noise_pathname="./example_data/noise/*", num_data=1000, batch_size=32,
+            epochs=5, validation_split=0.2, workers=1, max_queue_size=10,
+            verbose=2, filename="retrained"):
+    """
+    Function to load a previously trained model and retrain it with different data.
+    Uses the same parameters as the original model but a previoulsy trained model
+    (model_filename, config_filename) are additionaly required.
+    """
+
+    # Load config file to initialize tensorflow model
+    config = load_obj(config_filename)
+
+    # Initialize TF model
+    tf_model = Model(ts_length=config['ts_length'], dt=config['dt'], optimizer=config['optimizer'],
+                     loss=config['loss'], drop_rate=config['drop_rate'], decimation_factor=config['decimation_factor'],
+                     cwt=config['cwt'], activation=config['activation'], data_augmentation=config['data_augmentation'],
+                     use_bias=config['use_bias'], **config['kwargs'])
+
+    # Start training of previoulsy trained model
+    signal_files = glob.glob(signal_pathname)                   # Read signal files
+    random.shuffle(signal_files)                                # Shuffle signal files
+    signal_files = signal_files[:num_data]
+    tf_model.model = load_model(model_filename)                 # Load pretrained model
+
+    # Start training
+    if workers == 1:
+        use_multiprocessing = False
+    else:
+        use_multiprocessing = True
+
+    tf_model.train_model_generator(signal_file=signal_files, noise_file=noise_pathname,
+                                   epochs=epochs, batch_size=batch_size, verbose=verbose,
+                                   workers=workers, use_multiprocessing=use_multiprocessing,
+                                   max_queue_size=max_queue_size,
+                                   validation_split=validation_split)
+
+    # Plot history
+    tf_model.plot_history(filename=filename)
+
+    # Save model and config file
+    tf_model.save_model(filename=filename)
