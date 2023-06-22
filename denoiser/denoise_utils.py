@@ -4,6 +4,7 @@ import obspy
 import copy
 import asyncio
 import joblib
+import numbers
 import pandas as pd
 from pathlib import Path
 
@@ -535,22 +536,21 @@ def __auto_denoiser(date: obspy.UTCDateTime, model_filename: str, config_filenam
         for i, denoised in enumerate(denoised_stream):
             # Make directories if they do not exist
             full_pathname = os.path.join(sds_dir_denoised, "{:04d}".format(date.year), network, station,
-                                         f"{denoised.stats.channel}{data_type}")
+                                         f"{denoised.stats.channel}.{data_type}")
             if not os.path.exists(full_pathname):
                 os.makedirs(full_pathname)
 
-            filename = os.path.join("{}{:04d}".format(sds_dir_denoised, date.year), network, station,
-                                    f"{denoised.stats.channel}{data_type}", "{}.{}.{}.{}.D.{:04d}.{:03d}".
-                                    format(denoised.stats.network,
-                                    denoised.stats.station,
-                                    denoised.stats.location,
-                                    denoised.stats.channel,
-                                    denoised.stats.starttime.year,
-                                    denoised.stats.starttime.julday)
-                                    )
+            filename = "{}.{}.{}.{}.{}.{:04d}.{:03d}".format(denoised.stats.network,
+                                                             denoised.stats.station,
+                                                             denoised.stats.location,
+                                                             denoised.stats.channel,
+                                                             data_type,
+                                                             denoised.stats.starttime.year,
+                                                             denoised.stats.starttime.julday
+                                                             )
 
             # Write full stream
-            denoised.write(filename=filename,
+            denoised.write(filename=os.path.join(full_pathname, filename),
                            format="MSEED", encoding="STEIM2", byteorder=">", reclen=reclen[i])
 
         # Return denoised stream and a copy that only contains the new denoised data
@@ -579,37 +579,33 @@ def read_csv(filename: str, date=obspy.UTCDateTime(), **kwargs):
     for i, station in enumerate(df_csv["station"]):
         network = df_csv["network"][i]
 
-        # Add . to data_type if not set in input
-        if df_csv['type'][i] != ".":
-            data_type = ".{}".format(df_csv['type'][i])
-        else:
-            data_type = df_csv['type'][i]
-
         # Add location to dataframe if it is available in csv file, otherwise use *
         try:
             location = df_csv['location'][i]
             if is_nan(location):
                 location = "*"
-            if isinstance(location, float):                               # Convert location to two digit string
+            if isinstance(location, numbers.Number):       # Convert location to two digit string
                 location = "{:02d}".format(int(location))
         except KeyError:
             location = "*"
 
         # Update dict
-        df_dict.update({"{}.{}".format(network, station): dict(date=date,
-                                                               model_filename=df_csv['dae_model'][i],
-                                                               config_filename=df_csv['config'][i],
-                                                               sds_dir_noisy=df_csv['sdsdir'][i],
-                                                               sds_dir_denoised=df_csv['sds_out'][i],
-                                                               network=df_csv['network'][i],
-                                                               station=df_csv['station'][i],
-                                                               location=location,
-                                                               station_code_noisy=df_csv['channel_code'][i],
-                                                               station_code_denoised=df_csv['channel_code_denoised'][i],
-                                                               channels=df_csv['channel_direction'][i],
-                                                               data_type=data_type,
-                                                               calib=float(df_csv['calib'][i])
-                                                               )
+        df_dict.update({"{}.{}.{}".format(network, station, location):
+                            dict(
+                                date=date,
+                                model_filename=df_csv['dae_model'][i],
+                                config_filename=df_csv['config'][i],
+                                sds_dir_noisy=df_csv['sdsdir'][i],
+                                sds_dir_denoised=df_csv['sds_out'][i],
+                                network=df_csv['network'][i],
+                                station=df_csv['station'][i],
+                                location=location,
+                                station_code_noisy=df_csv['channel_code'][i],
+                                station_code_denoised=df_csv['channel_code_denoised'][i],
+                                channels=df_csv['channel_direction'][i],
+                                data_type=df_csv['type'][i],
+                                calib=float(df_csv['calib'][i])
+                                )
                         }
                        )
 
