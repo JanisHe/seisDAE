@@ -91,5 +91,9 @@ with high signal-to-ratio events from the Stanford Earthquake Dataset
 #### Automatic denoiser
 In many cases one needs real time denoising to analyse the denoised traces e.g. with Seiscomp.
 The function `auto_denoiser` in `./denoiser.denoiser_utils.py` reads a list with all required parameters
-from a csv file (`./denoiser/autp_denoiser.csv`). By adding a date, it is possible to start a cron job
+from a csv file (`./denoiser/auto_denoiser.csv`). By adding a date, it is possible to start a cron job
 that denoises the defined stations regulary. 
+
+#### Retrain a model
+If you like to retrain an already trained denoising model, the file `model.py` contains the function
+`retrain`. The function loads a tensorflow model, takes new data and trains the model with the new data.
