@@ -593,7 +593,7 @@ class DataGenerator(Sequence):
 
 def retrain(model_filename, config_filename, signal_pathname="./example_data/signal/*",
             noise_pathname="./example_data/noise/*", num_data=1000, batch_size=32,
-            epochs=5, validation_split=0.2, workers=1, max_queue_size=10,
+            epochs=5, validation_split=0.2, workers=1, max_queue_size=10, callbacks=None,
             verbose=2, filename="retrained"):
     """
     Function to load a previously trained model and retrain it with different data.
@@ -608,7 +608,7 @@ def retrain(model_filename, config_filename, signal_pathname="./example_data/sig
     tf_model = Model(ts_length=config['ts_length'], dt=config['dt'], optimizer=config['optimizer'],
                      loss=config['loss'], drop_rate=config['drop_rate'], decimation_factor=config['decimation_factor'],
                      cwt=config['cwt'], activation=config['activation'], data_augmentation=config['data_augmentation'],
-                     use_bias=config['use_bias'], **config['kwargs'])
+                     use_bias=config['use_bias'], callbacks=callbacks, **config['kwargs'])
 
     # Start training of previoulsy trained model
     signal_files = glob.glob(signal_pathname)                   # Read signal files
