@@ -240,7 +240,8 @@ def denoising_trace(trace, model_filename=None, config_filename=None, overlap=0.
                                                                                 location=trace.stats.location,
                                                                                 channel=trace.stats.channel)))
     if verbose is True:
-        print(f"Successfully denoised {trace.id} between {trace.stats.starttime} and {trace.stats.endtime}")
+        print(f"Successfully denoised {trace.id} between {trace.stats.starttime} and {trace.stats.endtime}",
+              flush=True)
 
     return st_denoised[0], st_noise[0]
 
@@ -402,7 +403,7 @@ def denoise(date, model_filename, config_filename, channels, pathname_data, netw
                                 )
 
         # Write full stream
-        print("Writing data to {}".format(filename))
+        print("Writing data to {}".format(filename), flush=True)
         denoised.write(filename=filename,
                        format="MSEED", encoding="STEIM2", byteorder=">", reclen=reclen[i])
 
@@ -481,7 +482,7 @@ def __auto_denoiser(date: obspy.UTCDateTime, model_filename: str, config_filenam
                                          station_code=station_code_noisy,
                                          channels=channels, data_type=data_type, location=location)
     except Exception as e:
-        print(e)
+        print(e, flush=True)
         return None, None, None
 
     try:
