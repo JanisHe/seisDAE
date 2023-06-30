@@ -305,7 +305,7 @@ class Model:
                            max_pooling=self.max_pooling, cwt=self.cwt, kwargs=self.kwargs,
                            data_augmentation=self.data_augmentation)
         save_obj(dictionary=config_dict, filename=settings_filename)
-        print("Save config file as {}".format(settings_filename))
+        print("Save config file as {}".format(settings_filename), flush=True)
 
     def save_model(self, pathname_model="./Models", pathname_config="./config", filename=None):
         """
@@ -326,19 +326,19 @@ class Model:
             for callback_index, callback_val in enumerate(self.callbacks):
                 if type(callback_val) == tf.keras.callbacks.ModelCheckpoint:
                     self.model.load_weights(self.callbacks[callback_index].filepath)
-                    print("Model is saved from latest checkpoints.")
+                    print("Model is saved from latest checkpoints.", flush=True)
                     break
 
         if filename:
             self.model.save("{}/{}.h5".format(pathname_model, filename), overwrite=True)
-            print("Saved Model as {}/{}.h5".format(pathname_model, filename))
+            print("Saved Model as {}/{}.h5".format(pathname_model, filename), flush=True)
         else:
             if self.cwt is False:
                 self.model.save("{}/{}_stft.h5".format(pathname_model, self.now_str), overwrite=True)
-                print("Saved Model as {}/{}_stft.h5".format(pathname_model, self.now_str))
+                print("Saved Model as {}/{}_stft.h5".format(pathname_model, self.now_str), flush=True)
             elif self.cwt is True:
                 self.model.save("{}/{}_cwt.h5".format(pathname_model, self.now_str), overwrite=True)
-                print("Saved Model as {}/{}_cwt.h5".format(pathname_model, self.now_str))
+                print("Saved Model as {}/{}_cwt.h5".format(pathname_model, self.now_str), flush=True)
 
 
     def train_model_generator(self, signal_file, noise_file,

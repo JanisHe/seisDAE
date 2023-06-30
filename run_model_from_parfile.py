@@ -19,7 +19,7 @@ def main(parfile):
     :param parfile: Full pathname of the parfile
     """
 
-    print("Reading data input arguments from {}".format(parfile))
+    print("Reading data input arguments from {}".format(parfile), flush=True)
     parameters = readtxt(parfile)
 
     # Make copy of parfile and rename it by filename given in parameters
