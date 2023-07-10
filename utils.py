@@ -128,7 +128,27 @@ def is_nan(num):
     return num != num
 
 
+def shift_array(array: np.array):
+    import random
+    shift = random.randint(-int(len(array)/2), int(len(array)/2))
+    zeros = np.zeros(np.abs(shift))
+    if shift > 0:
+        array = np.concatenate((zeros, array))
+    elif shift < 0:
+        array = np.concatenate((array, zeros))
+
+    return array
+
+
 if __name__ == "__main__":
-    para = readtxt("model_parfile")
-    print()
+    import glob
+    import matplotlib.pyplot as plt
+    import random
+
+    files = glob.glob("/home/janis/CODE/seismic_denoiser/example_data/signal/*")
+    d = np.load(random.choice(files))
+    data = d["data"]
+    shifted = shift_array(data)
+    plt.plot(shifted[:6001])
+    plt.show()
 

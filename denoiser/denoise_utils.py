@@ -293,8 +293,8 @@ def denoising_stream(stream, model_filename=None, config_filename=None, overlap=
         # Loop over each trace in stream and start denoising
         for trace in stream:
             tr_signal, tr_noise = denoising_trace(trace=trace, model_filename=model_filename,
-                                                   config_filename=config_filename, verbose=verbose,
-                                                   overlap=overlap, chunksize=chunksize, **kwargs)
+                                                  config_filename=config_filename, verbose=verbose,
+                                                  overlap=overlap, chunksize=chunksize, **kwargs)
             st_rec_signal += tr_signal
             st_rec_noise += tr_noise
 

@@ -21,7 +21,7 @@ from tensorflow.keras.layers import Input, Conv2D, BatchNormalization, ReLU, Dro
     MaxPooling2D, UpSampling2D, Dense, Softmax, Flatten, Reshape, Add, LeakyReLU
 
 import pycwt
-from utils import save_obj, load_obj
+from utils import save_obj, load_obj, shift_array
 
 
 # TODO: Use os.path.join instead of absolute paths
@@ -504,10 +504,12 @@ class DataGenerator(Sequence):
 
                 # epsilon = 0  # Avoiding zeros in added arrays
                 # shift1 = np.random.uniform(low=-1, high=1, size=int(self.ts_length - s_samp)) * epsilon
-                # TODO: Check data augmentation if correct
+                # TODO: Check data augmentation if correct; Ignore itp and its
+                # signal = shift_array(array=signal)
+                # signal = signal[:self.ts_length]
                 if p_samp and s_samp:
                     if int(self.ts_length - s_samp) < 0:
-                        shift1 = np.zeros(0) 
+                        shift1 = np.zeros(0)
                     else:
                         shift1 = np.zeros(shape=int(self.ts_length - s_samp))
                     signal = np.concatenate((shift1, signal))
