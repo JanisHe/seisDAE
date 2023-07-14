@@ -484,57 +484,19 @@ class DataGenerator(Sequence):
                 if np.count_nonzero(np.diff(noise['data'])) / len(noise['data']) < 0.95:
                     len_noise = 0
 
-            # XXX Leads to Runtime Warnings (Division by zero) in estimation of mapping functions
-            # XXX RuntimeWarning: divide by zero encountered in true_divide
-            # DATA AUGMENTATION
-            # Move signal randomly, hence P-arrival varies its place
-            # Add randomly zeros at beginning
+            # Start data augmentation only for signal time windows
             if self.data_augmentation is True:
-                # Read signal and noise from npz files
-                try:
-                    p_samp = signal["itp"]  # Sample of P-arrival
-                    s_samp = signal["its"]  # Sample of S-arrival
-                except KeyError:
-                    p_samp = None
-                    s_samp = None
-
                 # Read data arrays from signal and noise
                 signal = signal["data"]
                 noise = noise["data"][:self.ts_length]
 
-                # epsilon = 0  # Avoiding zeros in added arrays
-                # shift1 = np.random.uniform(low=-1, high=1, size=int(self.ts_length - s_samp)) * epsilon
-                # TODO: Check data augmentation if correct; Ignore itp and its
-                # signal = shift_array(array=signal)
-                # signal = signal[:self.ts_length]
-                if p_samp and s_samp:
-                    if int(self.ts_length - s_samp) < 0:
-                        shift1 = np.zeros(0)
-                    else:
-                        shift1 = np.zeros(shape=int(self.ts_length - s_samp))
-                    signal = np.concatenate((shift1, signal))
-                    # Cut signal to length of ts_length and arrival of P-phase is included
-                    p_samp += len(shift1)
-                    s_samp += len(shift1)
-                    start = random.randint(0, p_samp)
-                    signal = signal[start:start + self.ts_length]
-                else:                                                # XXX Add case just for p_samp
-                    if self.ts_length > len(signal):
-                        start = random.randint(0, len(signal) - self.ts_length - 1)
-                        signal = signal[start:int(start + self.ts_length)]
-                    else:
-                        signal = signal[:self.ts_length]
-            else:
-                signal = signal[:self.ts_length]
+                # Shift signal array to the left or right. Zeros are instead.
+                signal = shift_array(array=signal)
+                signal = signal[:self.ts_length]     # Get correct lenght of signal array
 
             # Preprocess data and get sampling rate for time-frequency representation
-            # XXX Preprocessing as parameters
             noise, _ = preprocessing(noise, dt=self.dt, decimation_factor=self.decimation_factor)
-                                     # filter=dict(type="bandpass", freqmin=0.03, freqmax=0.5))
-                                     # taper=dict(max_percentage=0.02, type="cosine"))
             signal, self.dt_tf = preprocessing(signal, dt=self.dt, decimation_factor=self.decimation_factor)
-                                               # filter=dict(type="bandpass", freqmin=0.03, freqmax=0.5))
-                                               # taper=dict(max_percentage=0.02, type="cosine"))
 
             # Normalize Noise and signal by each max. absolute value
             # Since noise and signal do not have same amplitude range, each trace is normalized by itself
