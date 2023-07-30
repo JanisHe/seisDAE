@@ -377,7 +377,8 @@ class Model:
                                       callbacks=self.callbacks, max_queue_size=max_queue_size)
 
         # Remove temporary config file
-        os.remove("./config/{}.config".format(filename_tmp_config))
+        if os.path.isfile(filename_tmp_config):
+            os.remove("./config/{}.config".format(filename_tmp_config))
 
     def plot_history(self, pathname="./figures", plot=True, filename=None):
         """
@@ -493,6 +494,9 @@ class DataGenerator(Sequence):
                 # Shift signal array to the left or right. Zeros are instead.
                 signal = shift_array(array=signal)
                 signal = signal[:self.ts_length]     # Get correct lenght of signal array
+            else:
+                signal = signal["data"][:self.ts_length]
+                noise = noise["data"][:self.ts_length]
 
             # Preprocess data and get sampling rate for time-frequency representation
             noise, _ = preprocessing(noise, dt=self.dt, decimation_factor=self.decimation_factor)
