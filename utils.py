@@ -1,5 +1,9 @@
+import os
+import glob
 import pickle
+import random
 import numpy as np
+
 
 def save_obj(dictionary, filename):
     with open(filename, 'wb') as f:
@@ -129,7 +133,13 @@ def is_nan(num):
 
 
 def shift_array(array: np.array):
-    import random
+    """
+    Shifts numpy array randomly to the left or right for data augmentation.
+    For shift zeros are added to keep the same length.
+
+    :param array: numpy array
+    :return: shifted numpy array
+    """
     shift = random.randint(-int(len(array)/2), int(len(array)/2))
     zeros = np.zeros(np.abs(shift))
     if shift > 0:
@@ -138,6 +148,30 @@ def shift_array(array: np.array):
         array = np.concatenate((array, zeros))
 
     return array
+
+
+def check_npz(npz_filename: str):
+    """
+    Trys to read npz file. If not the file is deleted
+    :param npz_filename: filename to check
+    """
+    try:
+        np.load(npz_filename)
+    except ValueError:
+        os.remove(npz_filename)
+
+
+def check_noise_files(noise_dirname: str, extension="npz"):
+    """
+    Reads all files in noise_dirname to check all .npz files.
+    If a file cannot be read it is deleted.
+
+    :param noise_dirname: Directory of noise npz files
+    :param extension: Extension of filenames, default is npz.
+    """
+    files = glob.glob(os.path.join(noise_dirname, f"*.{extension}"))
+    for filename in files:
+        check_npz(npz_filename=filename)
 
 
 if __name__ == "__main__":
