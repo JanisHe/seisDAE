@@ -477,7 +477,9 @@ class DataGenerator(Sequence):
                     noise = np.load(noise_filename)
                 except ValueError:
                     msg = f"Numpy cannot load {noise_filename}.\n" \
-                          f"The file seems to have an internal error."
+                          f"The file seems to have an internal error and will be deleted.\n" \
+                          f"To check your files use the following function: utils.check_noise_files."
+                    os.remove(noise_filename)
                     raise ValueError(msg)
 
                 len_noise = len(noise['data'])

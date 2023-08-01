@@ -156,7 +156,7 @@ def check_npz(npz_filename: str, verbose=False):
     :param npz_filename: filename to check
     """
     try:
-        np.load(npz_filename)
+        dataset = np.load(npz_filename)
     except ValueError:
         if verbose is True:
             print("File with error:", npz_filename)
