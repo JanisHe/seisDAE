@@ -150,7 +150,7 @@ def shift_array(array: np.array):
     return array
 
 
-def check_npz(npz_filename: str):
+def check_npz(npz_filename: str, verbose=False):
     """
     Trys to read npz file. If not the file is deleted
     :param npz_filename: filename to check
@@ -158,10 +158,12 @@ def check_npz(npz_filename: str):
     try:
         np.load(npz_filename)
     except ValueError:
+        if verbose is True:
+            print("File with error:", npz_filename)
         os.remove(npz_filename)
 
 
-def check_noise_files(noise_dirname: str, extension="npz"):
+def check_noise_files(noise_dirname: str, extension="npz", **kwargs):
     """
     Reads all files in noise_dirname to check all .npz files.
     If a file cannot be read it is deleted.
@@ -171,7 +173,7 @@ def check_noise_files(noise_dirname: str, extension="npz"):
     """
     files = glob.glob(os.path.join(noise_dirname, f"*.{extension}"))
     for filename in files:
-        check_npz(npz_filename=filename)
+        check_npz(npz_filename=filename, **kwargs)
 
 
 if __name__ == "__main__":
