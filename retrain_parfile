@@ -1,0 +1,22 @@
+# Paramater file to run retraining of the Denosing Autoencoder
+#############################################################################################################
+# Load previously trained DAE model
+model = ./Models/gr_mixed_stft.h5
+config = ./config/gr_mixed_stft.config
+#############################################################################################################
+# Pathnames of signal and noise files (* for placeholder are valid)
+signal_pathname = ./example_data/signal/*
+noise_pathname = ./example_data/noise/*
+num_signals = 1000                      # Number of signals to use. If not specified it takes all signals
+filename = gr_mixed_retrained           # Filename for saved checkpoints, model and history plots
+#############################################################################################################
+# Parameters for retraining
+validation_split = 0.2                  # Validation split of signals. [0-1] -> recommended: 0.2
+epochs = 50                             # Number of epochs for training
+batch_size = 32                         # Batch size
+patience = 5                            # Patience for early stopping callback
+verbose = 2                             # Verbosity for training [1-3]
+#############################################################################################################
+# Setup for multiprocessing
+workers = 2                             # Maximum number of processes to spin up when using process-based threading
+max_queue_size = 10                     # Maximum size for the generator queue. Default is 10
