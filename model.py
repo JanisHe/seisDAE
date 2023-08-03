@@ -377,7 +377,7 @@ class Model:
                                       callbacks=self.callbacks, max_queue_size=max_queue_size)
 
         # Remove temporary config file
-        if os.path.isfile(filename_tmp_config):
+        if os.path.isfile("./config/{}.config".format(filename_tmp_config)):
             os.remove("./config/{}.config".format(filename_tmp_config))
 
     def plot_history(self, pathname="./figures", plot=True, filename=None):
