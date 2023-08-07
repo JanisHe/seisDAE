@@ -157,7 +157,8 @@ def check_npz(npz_filename: str, verbose=False):
     """
     try:
         dataset = np.load(npz_filename)
-    except ValueError:
+        data = dataset["data"]
+    except Exception:
         if verbose is True:
             print("File with error:", npz_filename)
         os.remove(npz_filename)
