@@ -463,14 +463,21 @@ class DataGenerator(Sequence):
             # XXX Add warning when while loop is infinte and signal length is to short!
             # Read signal
             len_signal = 0
+            while_sig_count = 0
             while len_signal < self.ts_length:
                 signal_filename = "{}".format(self.signal_list[random.randint(0, len(self.signal_list) - 1)])
                 signal = np.load(signal_filename)
                 len_signal = len(signal['data'])
+                while_sig_count += 1
+                # End program if it runs into infinite loop
+                if while_sig_count >= 5000:
+                    msg = "Running into infinite loop when loading signal files."
+                    raise Exception(msg)
 
             # Read noise
             # Proof noise for correct length and check whether array does not contain to many zeros
             len_noise = 0
+            while_noi_count = 0
             while len_noise < self.ts_length:
                 noise_filename = "{}".format(self.noise_list[random.randint(0, len(self.noise_list) - 1)])
                 try:
@@ -484,8 +491,15 @@ class DataGenerator(Sequence):
 
                 len_noise = len(noise['data'])
                 # Check how many percent zeros contains the noise array
-                if np.count_nonzero(np.diff(noise['data'])) / len(noise['data']) < 0.95:
-                    len_noise = 0
+                # XXX Is the following check necessary?
+                # if np.count_nonzero(np.diff(noise['data'])) / len(noise['data']) < 0.95:
+                #     len_noise = 0
+
+                while_noi_count += 1
+                # End program if it runs into infinite loop
+                if while_noi_count >= 5000:
+                    msg = "Running into infinite loop when loading noise files."
+                    raise Exception(msg)
 
             # Start data augmentation only for signal time windows
             if self.data_augmentation is True:
