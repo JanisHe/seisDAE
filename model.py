@@ -6,6 +6,7 @@ import os
 import glob
 import copy
 import random
+import zipfile
 
 import obspy
 import numpy as np
@@ -97,6 +98,20 @@ def cropping_layer(needed_shape, is_shape):
 
     return shape1, shape2
 
+
+def loading_file_error(filename: str,
+                       error=ValueError):
+    """
+    Some data files might be corrupted. This function removes the corrupted file and
+    raises an Error.
+    :param filename: filename of corrupted file
+    :param error: Type of Error that will be raised
+    """
+    msg = f"Numpy cannot load {filename}.\n" \
+          f"The file seems to have an internal error and will be deleted.\n" \
+          f"To check your files use the following function: utils.check_noise_files."
+    os.remove(filename)
+    raise error(msg)
 
 class Model:
 
@@ -466,8 +481,11 @@ class DataGenerator(Sequence):
             while_sig_count = 0
             while len_signal < self.ts_length:
                 signal_filename = "{}".format(self.signal_list[random.randint(0, len(self.signal_list) - 1)])
-                signal = np.load(signal_filename)
-                len_signal = len(signal['data'])
+                try:
+                    signal = np.load(signal_filename)
+                    len_signal = len(signal['data'])
+                except Exception:
+                    loading_file_error(filename=signal_filename, error=Exception)
                 while_sig_count += 1
                 # End program if it runs into infinite loop
                 if while_sig_count >= 5000:
@@ -483,13 +501,12 @@ class DataGenerator(Sequence):
                 try:
                     noise = np.load(noise_filename)
                 except ValueError:
-                    msg = f"Numpy cannot load {noise_filename}.\n" \
-                          f"The file seems to have an internal error and will be deleted.\n" \
-                          f"To check your files use the following function: utils.check_noise_files."
-                    os.remove(noise_filename)
-                    raise ValueError(msg)
+                    loading_file_error(filename=noise_filename, error=ValueError)
 
-                len_noise = len(noise['data'])
+                try:
+                    len_noise = len(noise['data'])
+                except zipfile.BadZipfile:
+                    loading_file_error(filename=noise_filename, error=zipfile.BadZipfile)
                 # Check how many percent zeros contains the noise array
                 # XXX Is the following check necessary?
                 # if np.count_nonzero(np.diff(noise['data'])) / len(noise['data']) < 0.95:
