@@ -538,8 +538,8 @@ class DataGenerator(Sequence):
             # Normalize Noise and signal by each max. absolute value
             # Since noise and signal do not have same amplitude range, each trace is normalized by itself
             if np.max(np.abs(signal)) <= 1e-15:
-                msg = "Your signal files contains an array only with zeros.\nThis is not valid! Please delete this " \
-                      "array from your data set."
+                msg = "Your signal file contains an array only with zeros.\nThis is not valid! Please delete this " \
+                      "array from your data set or run the script 'datasets/check_datasets.py' to check your files!"
                 raise ValueError(msg)
 
             if np.max(np.abs(noise)) > 0:

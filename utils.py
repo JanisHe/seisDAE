@@ -176,7 +176,7 @@ def check_npz(npz_filename: str, zero_check=False, verbose=False):
         remove_file(filename=npz_filename, verbose=verbose)
 
 
-def check_signal_zeros(signal_dir: str, extension="npz", verbose=False):
+def check_signal_files(signal_dir: str, extension="npz", verbose=False):
     """
     Function checks if signal files contain a file with zeros, since these files are not allowed for training.
     :param signal_dir: Full pathname for signal files

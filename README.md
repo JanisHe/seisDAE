@@ -56,6 +56,16 @@ np.savez(data=noise_data, file=filename)
 ```
 Afterwards, adjust the parfile and start your training.
 
+#### Preparing a training dataset
+Scripts to download e.g. STEAD or INSTANCE and to prepare these dataset will be added in future. Moreover,
+scripts to prepare noise samples also will be added in future versions.
+However, some data may be corrupted. Instead of going through all files, the script `datasets/check_datasets.py` can 
+be used  to check the files automatically. You can run the script directly from the command line by
+```commandline
+python datasets/check_datasets.py model_parfile
+```
+The parameters for signal and noise files are read from the parameter file.
+
 #### Denoise data
 Run the function `predict` from file `prediction.py` with your created model and
 config file. The parameter data_list is a list with numpy arrays for denoising.
