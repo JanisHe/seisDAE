@@ -615,7 +615,10 @@ def retrain(model_filename, config_filename, signal_pathname="./example_data/sig
     signal_files = glob.glob(signal_pathname)                   # Read signal files
     random.shuffle(signal_files)                                # Shuffle signal files
     signal_files = signal_files[:num_data]
-    tf_model.model = load_model(model_filename)                 # Load pretrained model
+    try:
+        tf_model.model = load_model(model_filename)             # Load pretrained model
+    except ValueError:
+        tf_model.model = load_model(model_filename, compile=False)
 
     # Start training
     if workers == 1:
