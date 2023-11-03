@@ -525,8 +525,7 @@ class DataGenerator(Sequence):
                 noise = noise["data"][:self.ts_length]
 
                 # Shift signal array to the left or right. Zeros are instead.
-                signal = shift_array(array=signal)
-                signal = signal[:self.ts_length]     # Get correct lenght of signal array
+                signal = shift_array(array=signal, length=self.ts_length)
             else:
                 signal = signal["data"][:self.ts_length]
                 noise = noise["data"][:self.ts_length]
@@ -538,8 +537,9 @@ class DataGenerator(Sequence):
             # Normalize Noise and signal by each max. absolute value
             # Since noise and signal do not have same amplitude range, each trace is normalized by itself
             if np.max(np.abs(signal)) <= 1e-15:
-                msg = "Your signal file contains an array only with zeros.\nThis is not valid! Please delete this " \
-                      "array from your data set or run the script 'datasets/check_datasets.py' to check your files!"
+                msg = (f"Your signal file {signal_filename} contains an array only with zeros.\n"
+                       f"This is not valid! Please delete this array from your data set or run "
+                       f"the script 'datasets/check_datasets.py' to check your files!")
                 raise ValueError(msg)
 
             if np.max(np.abs(noise)) > 0:

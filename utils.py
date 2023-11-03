@@ -4,6 +4,8 @@ import pickle
 import random
 import numpy as np
 
+from scipy.signal.windows import tukey
+
 
 def save_obj(dictionary, filename):
     with open(filename, 'wb') as f:
@@ -132,22 +134,50 @@ def is_nan(num):
     return num != num
 
 
-def shift_array(array: np.array):
+def taper_array(array: np.array, alpha: float = 0.05):
+    """
+    Applies an tukey/cosine taper on array.
+    :param array: numpy array
+    :param alpha: float, optional, default is 0.05
+                 Shape parameter of the Tukey window, representing the fraction of the window inside the cosine tapered
+                 region. If zero, the Tukey window is equivalent to a rectangular window. If one, the Tukey window is
+                 equivalent to a Hann window. (See. scipy.signal.window.tukey)
+    :return: tapered array
+    """
+    taper = tukey(len(array), alpha=alpha)
+    tapered_array = array * taper
+
+    return tapered_array
+
+
+def shift_array(array: np.array,
+                length: int = 6001):
     """
     Shifts numpy array randomly to the left or right for data augmentation.
     For shift zeros are added to keep the same length.
 
     :param array: numpy array
+    :param length: Final length of the input array. Default is 6001
     :return: shifted numpy array
     """
-    shift = random.randint(-int(len(array)/2), int(len(array)/2))
-    zeros = np.zeros(np.abs(shift))
+    # Crop array by given length. Note the signal of interest has to be in this part!
+    array = array[:length]
+    shift = random.randint(-int(len(array) / 2), int(len(array) / 2))
+    result = np.empty_like(array)
     if shift > 0:
-        array = np.concatenate((zeros, array))
+        # Shift to the right
+        result[:shift] = 0                     # fill_value
+        shifted_array = array[:-shift]
+        result[shift:] = taper_array(shifted_array)
     elif shift < 0:
-        array = np.concatenate((array, zeros))
+        # Shift to the left
+        result[shift:] = 0                     # fill_value
+        shifted_array = array[-shift:]
+        result[:shift] = taper_array(shifted_array)
+    else:
+        result[:] = array
 
-    return array
+    return result
 
 
 def remove_file(filename: str, verbose=False):
@@ -255,15 +285,17 @@ if __name__ == "__main__":
     # plt.plot(shifted[:6001])
     # plt.show()
 
-    files_signal = glob.glob("/home/janis/CODE/seismic_denoiser/example_data/signal/*")
+    files_signal = glob.glob("/rscratch/minos15/janis/dae_noise_data/instance_high_snr/*")
     files_noise = glob.glob("/home/janis/CODE/seismic_denoiser/example_data/noise/*")
-    signal = random.choice(files_signal)
-    print(signal)
-    s, n = old_data_augmentation(signal_npz_file=signal,
-                                 noise_npz_file=random.choice(files_noise))
-    d = np.load(signal)
-    data = d["data"]
-    shifted = shift_array(data)
-    plt.plot(s, alpha=0.5)
-    plt.plot(shifted[:6001], alpha=0.5)
-    plt.show()
+
+    for i in range(10):
+        signal = random.choice(files_signal)
+        print(signal)
+        # s, n = old_data_augmentation(signal_npz_file=signal,
+        #                              noise_npz_file=random.choice(files_noise))
+        d = np.load(signal)
+        data = d["data"]
+        shifted = shift_array(data)
+        plt.plot(data, alpha=0.5, color="blue")
+        plt.plot(shifted, alpha=0.5, color="orange")
+        plt.show()
