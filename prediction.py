@@ -64,13 +64,13 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
         input_shape = (model_dae.input_shape[1], model_dae.input_shape[2])
 
     # Allocate empty arrays for data
-    X = np.empty(shape=(len(data_list), *input_shape, config['channels']), dtype="float")
-    transform_list = np.empty(shape=(len(data_list), *input_shape, config['channels'] + 1), dtype="complex")
-    scales = []
-    dj = []
-    norm_factors = []
-    dt = config['dt']
-    mean_values = []
+    X = np.empty(shape=(len(data_list), *input_shape, config['channels']), dtype="float")  # Input for CNN
+    transform_list = np.empty(shape=(len(data_list), *input_shape, config['channels'] + 1), dtype="complex")  # TF transforms
+    scales = []  # Scales for CWT
+    dj = []      # Spacing for CWT
+    norm_factors = []  # Normalization of traces
+    dt = config['dt']  # Sampling rate
+    mean_values = []   # List with mean values of traces
 
     if config['channels'] == 1:
         phases = []
@@ -142,7 +142,7 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
     # Loop over each element in predicted data and estimate denoised data
     for i in range(X_pred.shape[0]):
         if config['channels'] == 1:
-            x_pred = X_pred[i, :, :, 0] * np.exp(1j * phases[i])
+            X_pred = X_pred[i, :, :, 0] * np.exp(1j * phases[i])
         elif config['channels'] == 2:
             transform_list[i, :, :, 1] = transform_list[i, :, :, 0] * X_pred[i, :, :, 0]   # Recovered Signal
             transform_list[i, :, :, 2] = transform_list[i, :, :, 0] * X_pred[i, :, :, 1]   # Recovered Noise

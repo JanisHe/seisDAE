@@ -1,4 +1,6 @@
 import os
+import warnings
+
 import numpy as np
 import obspy
 import copy
@@ -136,6 +138,9 @@ def denoising_trace(trace, model_filename=None, config_filename=None, overlap=0.
 
     :returns: denoised trace, noisy trace
     """
+    # Copy trace to avoid overwriting of original obspy trace
+    trace = trace.copy()
+
     # Check value for overlap
     if overlap < 0 or overlap >= 1:
         msg = f"Value overlap is not in range [0, 1[. You set it to {overlap}."
@@ -150,8 +155,18 @@ def denoising_trace(trace, model_filename=None, config_filename=None, overlap=0.
     config = load_obj(config_filename)
 
     # Resample trace if sampling rate in config file and sampling rate of trace are not equal
+    trace_starttime = trace.stats.starttime
+    trace_endtime = trace.stats.endtime
     if trace.stats.delta != config['dt']:
+        warnings.warn(f"Trace {trace} is resampled to {1 / config['dt']} Hz.")
         trace.resample(sampling_rate=1 / config['dt'])
+
+    # Add zeros to trace if length is smaller than required length for model prediction
+    adding_zeros = False
+    if trace.stats.npts < config['ts_length']:
+        adding_zeros = True
+        npts_diff = config['ts_length'] - trace.stats.npts
+        trace.data = np.concatenate((trace.data, np.zeros(npts_diff)))
 
     # Loop over each window
     data_list = []
@@ -239,8 +254,14 @@ def denoising_trace(trace, model_filename=None, config_filename=None, overlap=0.
                                                                                 network=trace.stats.network,
                                                                                 location=trace.stats.location,
                                                                                 channel=trace.stats.channel)))
+
+    # Trim denoised and noise to original start- and endtime
+    if adding_zeros is True:
+        st_denoised.trim(starttime=trace_starttime, endtime=trace_endtime)
+        st_noise.trim(starttime=trace_starttime, endtime=trace_endtime)
+
     if verbose is True:
-        print(f"Successfully denoised {trace.id} between {trace.stats.starttime} and {trace.stats.endtime}",
+        print(f"Successfully denoised {trace.id} between {trace_starttime} and {trace_endtime}",
               flush=True)
 
     return st_denoised[0], st_noise[0]
@@ -263,6 +284,9 @@ def denoising_stream(stream, model_filename=None, config_filename=None, overlap=
                      If True, denoising is done in parallel otherwise one a single CPU
     :returns: stream of recovered signal and noise
     """
+
+    # Copy stream, otherwise the given stream will be overwritten
+    stream = stream.copy()
 
     # Check whether input stream is not empty
     if len(stream) == 0:
