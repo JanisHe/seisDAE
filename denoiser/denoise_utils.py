@@ -136,6 +136,12 @@ def denoising_trace(trace, model_filename=None, config_filename=None, overlap=0.
     :param chunksize: int, for denosing of large traces, a trace is splitted into parts of chunksize, otherwise
                       the data might not fit into memory. In particular it is necessary when CWT is used.
 
+    Keyword arguments:
+        ckpt_model (bool): If true, the model can be loaded from the checkpoints. This can be used, when the model
+                           is tested e.g. during the training
+        loaded_model: Preloaded tensorflow model. Can be used if e.g. only one model is used for prediction of all
+                      traces in stream.
+
     :returns: denoised trace, noisy trace
     """
     # Copy trace to avoid overwriting of original obspy trace
@@ -282,6 +288,13 @@ def denoising_stream(stream, model_filename=None, config_filename=None, overlap=
                       into small chunks to reduce the memory. A value of 600 - 800 is recommended. Default is None.
     :param parallel: bool, default is False
                      If True, denoising is done in parallel otherwise one a single CPU
+
+    Keyword arguments:
+        ckpt_model (bool): If true, the model can be loaded from the checkpoints. This can be used, when the model
+                           is tested e.g. during the training
+        loaded_model: Preloaded tensorflow model. Can be used if e.g. only one model is used for prediction of all
+                      traces in stream.
+
     :returns: stream of recovered signal and noise
     """
 

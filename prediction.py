@@ -16,7 +16,8 @@ from model import cwt_wrapper, Model, preprocessing
 from utils import load_obj
 
 
-def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_model=False):
+def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_model=False,
+            loaded_model=None):
     """
     Function to predict data in data_list.
 
@@ -25,8 +26,10 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
         config_filename: Full filename of config file
         data_list: List that contains numpy arrays for denoising
         optimizer: tensorflow optimizer for Model. Necessary if ckpt_model is True, default is adam.
-        ckpt_model; True if tensorflow checkpoints are used as model. Set False if a full trained model is used, but
+        ckpt_model: True if tensorflow checkpoints are used as model. Set False if a full trained model is used, but
                     this is not necessary. Default is False
+        loaded_model: Takes a previously trained model. Load the model with tensorflow.keras.models.load_model.
+                      Default is None and model is loaded from model_filename
 
     Returns:
          recovered: Array that contains recoverd signal and noise. Has shape len(data_list)*ts_length*2, where
@@ -41,7 +44,7 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
     config = load_obj(config_filename)
 
     # Read tensorflow model
-    if ckpt_model is True:
+    if ckpt_model is True and loaded_model is None:
         # Load weights from checkpoint
         model_dae = Model(ts_length=config['ts_length'], use_bias=config['use_bias'],
                           activation=config['activation'], drop_rate=config['drop_rate'],
@@ -53,7 +56,7 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
                               fully_connected=config['fully_connected'])
         model_dae.model.load_weights(model_filename)
         input_shape = model_dae.shape
-    else:
+    elif ckpt_model is False and loaded_model is None:
         # Read fully trained model
         try:
             model_dae = load_model(model_filename)
@@ -61,6 +64,9 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
             model_dae = load_model(model_filename, compile=False)   # Do not recompile the model
                                                                     # In some cases, tensorflow versions have problems
                                                                     # with loading models from newer versions.
+        input_shape = (model_dae.input_shape[1], model_dae.input_shape[2])
+    elif loaded_model is not None:
+        model_dae = loaded_model
         input_shape = (model_dae.input_shape[1], model_dae.input_shape[2])
 
     # Allocate empty arrays for data
