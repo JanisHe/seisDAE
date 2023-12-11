@@ -105,9 +105,10 @@ def readtxt(fname):
 
     return parameters
 
+
 def rms(x):
     """
-    Root mean square of array x
+    Root-mean-square of array x
     :param x:
     :return:
     """
@@ -128,6 +129,10 @@ def signal_to_noise_ratio(signal, noise, decibel=True):
         return 20 * np.log10(rms(signal) / rms(noise))
     else:
         return rms(signal) / rms(noise)
+
+
+def normalize(array):
+    return (array - np.mean(array)) / np.std(array)
 
 
 def is_nan(num):
@@ -151,13 +156,15 @@ def taper_array(array: np.array, alpha: float = 0.05):
 
 
 def shift_array(array: np.array,
-                length: int = 6001):
+                length: int = 6001,
+                taper=False):
     """
     Shifts numpy array randomly to the left or right for data augmentation.
     For shift zeros are added to keep the same length.
 
     :param array: numpy array
     :param length: Final length of the input array. Default is 6001
+    :param taper: If True, array is tapered with a cosine taper. Default is False.
     :return: shifted numpy array
     """
     # Crop array by given length. Note the signal of interest has to be in this part!
@@ -168,12 +175,18 @@ def shift_array(array: np.array,
         # Shift to the right
         result[:shift] = 0                     # fill_value
         shifted_array = array[:-shift]
-        result[shift:] = taper_array(shifted_array)
+        if taper is True:
+            result[shift:] = taper_array(shifted_array)
+        else:
+            result[shift:] = shifted_array
     elif shift < 0:
         # Shift to the left
         result[shift:] = 0                     # fill_value
         shifted_array = array[-shift:]
-        result[:shift] = taper_array(shifted_array)
+        if taper is True:
+            result[:shift] = taper_array(shifted_array)
+        else:
+            result[:shift] = shifted_array
     else:
         result[:] = array
 
@@ -189,7 +202,7 @@ def remove_file(filename: str, verbose=False):
     os.remove(filename)
 
 
-def check_npz(npz_filename: str, zero_check=False, verbose=False):
+def check_npz(npz_filename: str, zero_check=True, verbose=False):
     """
     Trys to read npz file. If not the file is deleted
     :param npz_filename: filename to check
@@ -285,7 +298,7 @@ if __name__ == "__main__":
     # plt.plot(shifted[:6001])
     # plt.show()
 
-    files_signal = glob.glob("/rscratch/minos15/janis/dae_noise_data/instance_high_snr/*")
+    files_signal = glob.glob("/bigssd/janis/stead_high_snr/*Z_*")
     files_noise = glob.glob("/home/janis/CODE/seismic_denoiser/example_data/noise/*")
 
     for i in range(10):
@@ -295,7 +308,8 @@ if __name__ == "__main__":
         #                              noise_npz_file=random.choice(files_noise))
         d = np.load(signal)
         data = d["data"]
-        shifted = shift_array(data)
-        plt.plot(data, alpha=0.5, color="blue")
-        plt.plot(shifted, alpha=0.5, color="orange")
+        shifted = shift_array(data, length=6001)
+        plt.plot(data, alpha=1, color="blue", label="True")
+        plt.plot(shifted, alpha=1, color="orange", label="Shifted")
+        plt.legend()
         plt.show()

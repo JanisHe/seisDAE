@@ -15,14 +15,14 @@ import matplotlib.pyplot as plt
 
 from datetime import datetime
 from scipy.signal import stft, istft
-from tensorflow.keras.utils import Sequence
-from tensorflow.keras.models import Model as TFmodel
-from tensorflow.keras.models import load_model
-from tensorflow.keras.layers import Input, Conv2D, BatchNormalization, ReLU, Dropout, Conv2DTranspose, Cropping2D, \
+from keras.utils import Sequence
+from keras.models import Model as TFmodel
+from keras.models import load_model
+from keras.layers import Input, Conv2D, BatchNormalization, ReLU, Dropout, Conv2DTranspose, Cropping2D, \
     MaxPooling2D, UpSampling2D, Dense, Softmax, Flatten, Reshape, Add, LeakyReLU
 
 import pycwt
-from utils import save_obj, load_obj, shift_array
+from utils import save_obj, load_obj, shift_array, normalize
 
 
 # TODO: Use os.path.join instead of absolute paths
@@ -311,7 +311,8 @@ class Model:
                 optimizer_name = self.optimizer.name
             except AttributeError:
                 optimizer_name = self.optimizer._name
-            
+
+        # TODO: Add model_filename to config. Then only config file needs to be read for denoising process
         config_dict = dict(shape=self.shape, ts_length=self.ts_length, dt=self.dt_orig, channels=self.channels,
                            depth=self.depth, filter_root=self.filter_root, kernel_size=self.kernel_size,
                            strides=self.strides, optimizer=optimizer_name, fully_connected=self.fully_connected,
