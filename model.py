@@ -84,7 +84,7 @@ def cropping_layer(needed_shape, is_shape):
     if diff1 % 2 == 0 and diff1 > 0:
         shape1 = (diff1//2, diff1//2)
     elif diff1 % 2 == 1 and diff1 > 0:
-        shape1 = (diff1//2, is_shape[0] - needed_shape[0])
+        shape1 = (diff1 // 2, (is_shape[0] - needed_shape[0]) - diff1 // 2)
     elif diff1 == 0:
         shape1 = (0, 0)
 
@@ -92,7 +92,7 @@ def cropping_layer(needed_shape, is_shape):
     if diff2 % 2 == 0 and diff2 > 0:
         shape2 = (diff2//2, diff2//2)
     elif diff2 % 2 == 1 and diff2 > 0:
-        shape2 = (diff1//2, is_shape[1] - needed_shape[1])
+        shape2 = (diff2//2, (is_shape[1] - needed_shape[1]) - diff2 // 2)
     elif diff2 == 0:
         shape2 = (0, 0)
 
@@ -570,25 +570,32 @@ class DataGenerator(Sequence):
                 cs, _, _, _ = cwt_wrapper(signal, dt=self.dt_tf, **self.kwargs)
                 cn, _, _, _ = cwt_wrapper(noise, dt=self.dt_tf, **self.kwargs)
 
+            # Normalize time-frequency representations by mean and standard deviation
+            # Avoids division by zero for input and output layers
+            # cns.real = normalize(cns.real)
+            # cs.real = normalize(cs.real)
+            # cn.real = normalize(cn.real)
+            #
+            # cns.imag = normalize(cns.imag)
+            # cs.imag = normalize(cs.imag)
+            # cn.imag = normalize(cn.imag)
+
             np.seterr(divide='ignore', invalid='ignore')  # Ignoring Runtime Warnings for division by zero
             # Write data to empty np arrays
             # Zhu et al, 2018
             X[i, :, :, 0] = cns.real / np.max(np.abs(cns.real))
             Y[i, :, :, 0] = 1 / (1 + np.abs(cn) / np.abs(cs))
 
-            # Replace nan and inf values
-            Y[i, :, :, 0] = np.nan_to_num(Y[i, :, :, 0])
-
             if self.channels == 2:
                 # Zhu et al, 2018
                 X[i, :, :, 1] = cns.imag / np.max(np.abs(cns.imag))
                 Y[i, :, :, 1] = (np.abs(cn) / np.abs(cs)) / (1 + np.abs(cn) / np.abs(cs))
-
-                # Replace nan and inf values
-                Y[i, :, :, 1] = np.nan_to_num(Y[i, :, :, 1])
             elif self.channels > 2:
                 msg = "Channel number cannot exceed 2.\nYour number of channels is {}".format(self.channels)
                 raise ValueError(msg)
+
+        # Replace nan and inf values
+        Y = np.nan_to_num(Y)
 
         return X, Y
 
