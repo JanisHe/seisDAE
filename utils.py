@@ -131,7 +131,13 @@ def signal_to_noise_ratio(signal, noise, decibel=True):
         return rms(signal) / rms(noise)
 
 
-def normalize(array):
+def normalize(array: np.array):
+    """
+    Removing mean from array and dividing by its standard deviation.
+    :param array: numpy array
+
+    :returns: normalized array
+    """
     return (array - np.mean(array)) / np.std(array)
 
 

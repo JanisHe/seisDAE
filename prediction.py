@@ -8,12 +8,12 @@ import obspy
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
-from tensorflow.keras.models import load_model
+from keras.models import load_model
 from scipy.signal import stft, istft
 
 import pycwt
 from model import cwt_wrapper, Model, preprocessing
-from utils import load_obj
+from utils import load_obj, normalize
 
 
 def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_model=False,
@@ -117,6 +117,9 @@ def predict(model_filename, config_filename, data_list,  optimizer="adam", ckpt_
 
         # Add transform to transform_list
         transform_list[i, :, :, 0] = cns
+
+        # Normalize time-frequency representation by mean and standard deviation
+        # cns = normalize(cns)
 
         # Write data to empty np arrays
         # X[i, :, :, 0] = np.abs(cns)
