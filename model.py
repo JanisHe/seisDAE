@@ -345,6 +345,7 @@ class Model:
                     print("Model is saved from latest checkpoints.", flush=True)
                     break
 
+        # TODO: Save model and config as one file
         if filename:
             self.model.save("{}/{}.h5".format(pathname_model, filename), overwrite=True)
             print("Saved Model as {}/{}.h5".format(pathname_model, filename), flush=True)
