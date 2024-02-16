@@ -21,7 +21,7 @@ Before starting, run the following command, please have the following packages i
  
 Otherwise run the following command in your conda environment:
 ```
-conda create -c conda-forge -n denoiser python=3.8 numpy=1.20 scipy=1.4.1 tqdm matplotlib obspy pandas joblib "tensorflow>=2.0"
+conda create -c conda-forge -n denoiser python=3.10 numpy scipy tqdm matplotlib obspy pandas joblib tensorflow
 ```
  
 After the installation of all packages, you can train the example by running
