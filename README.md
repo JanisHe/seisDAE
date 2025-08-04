@@ -1,5 +1,10 @@
 # Denoising Autoencoder for seismological data
 
+## Integration into SeisBench
+This package won't be maintained anymore, since it is included to SeisBench (https://github.com/seisbench/seisbench).
+There, you can also find a Jupyter-Notebook how to train your own SeisDAE model.
+
+## Installation
 This packages contains python scripts to train a neural network for the denoising of seismological data.
 This package is based on the work by 
  * Heuel, J. & Friederich, W. Suppression of wind turbine noise from seismological data using nonlinear thresholding and denoising autoencoder Journal of Seismology, 2022
